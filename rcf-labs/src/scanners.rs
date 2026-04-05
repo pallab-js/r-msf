@@ -3,11 +3,135 @@
 use std::pin::Pin;
 use std::future::Future;
 use std::sync::LazyLock;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use rcf_core::{
     Context, Module, ModuleCategory, ModuleInfo, ModuleOptions,
-    ModuleOption, OptionValue, ModuleOutput, Result, Target,
+    OptionValue, ModuleOutput, Result, Target,
 };
+
+/// SSRF protection: validates URLs to prevent attacks against internal infrastructure.
+pub struct SsrfProtection;
+
+impl SsrfProtection {
+    /// Check if a host is safe to request (prevents SSRF).
+    /// Returns true if safe, false if blocked.
+    pub fn is_safe(host: &str) -> bool {
+        Self::validate_target(host).is_ok()
+    }
+    
+    /// Check if a host is safe to request.
+    /// Returns Ok(()) if safe, Err(block_reason) if blocked.
+    pub fn validate_target(host: &str) -> std::result::Result<(), String> {
+        let host_lower = host.to_lowercase();
+        
+        // Block localhost variants
+        let localhost_patterns = [
+            "localhost", "127.0.0.1", "::1", "0.0.0.0",
+            "127.0.0.0/8", "localhost.localdomain",
+        ];
+        for pattern in &localhost_patterns {
+            if host_lower.contains(pattern) {
+                return Err(format!("SSRF blocked: localhost/loopback target '{}'", host));
+            }
+        }
+        
+        // Block cloud metadata endpoints
+        let metadata_patterns = [
+            "169.254.169.254",       // AWS, Azure, GCP metadata
+            "metadata.google.internal", // GCP
+            "metadata.azure.com",
+            "100.100.100.200",       // Alibaba Cloud
+            "192.0.0.192",          // OpenStack
+        ];
+        for pattern in &metadata_patterns {
+            if host_lower.contains(pattern) {
+                return Err(format!("SSRF blocked: cloud metadata endpoint '{}'", host));
+            }
+        }
+        
+        // Parse and check private IP ranges
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            match ip {
+                IpAddr::V4(ipv4) => {
+                    if Self::is_ipv4_private(&ipv4) {
+                        return Err(format!("SSRF blocked: private IPv4 '{}'", host));
+                    }
+                }
+                IpAddr::V6(ipv6) => {
+                    if Self::is_ipv6_private(&ipv6) {
+                        return Err(format!("SSRF blocked: private IPv6 '{}'", host));
+                    }
+                }
+            }
+        }
+        
+        // Block internal hostnames
+        let internal_patterns = [
+            "internal", "intranet", "dmz", "localnetwork",
+            ".local", ".internal", ".corp", ".lan",
+        ];
+        for pattern in &internal_patterns {
+            if host_lower.contains(pattern) {
+                return Err(format!("SSRF blocked: internal hostname '{}'", host));
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Check if an IPv4 address is in a private range.
+    fn is_ipv4_private(ip: &Ipv4Addr) -> bool {
+        let octets = ip.octets();
+        // 10.0.0.0/8
+        if octets[0] == 10 {
+            return true;
+        }
+        // 172.16.0.0/12
+        if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+            return true;
+        }
+        // 192.168.0.0/16
+        if octets[0] == 192 && octets[1] == 168 {
+            return true;
+        }
+        // 169.254.0.0/16 (link-local)
+        if octets[0] == 169 && octets[1] == 254 {
+            return true;
+        }
+        // 127.0.0.0/8 (loopback)
+        if octets[0] == 127 {
+            return true;
+        }
+        // 0.0.0.0/8
+        if octets[0] == 0 {
+            return true;
+        }
+        false
+    }
+    
+    /// Check if an IPv6 address is private/link-local.
+    fn is_ipv6_private(ip: &Ipv6Addr) -> bool {
+        let segments = ip.segments();
+        // Loopback ::1
+        if ip.is_loopback() {
+            return true;
+        }
+        // Link-local fe80::
+        if ip.is_unicast_link_local() {
+            return true;
+        }
+        // Unique local fc00::/7
+        if segments[0] & 0xfe00 == 0xfc00 {
+            return true;
+        }
+        // Unspecified ::ffff:0:0/96 (IPv4-mapped)
+        if let Some(v4) = ip.to_ipv4_mapped() {
+            return Self::is_ipv4_private(&v4);
+        }
+        false
+    }
+}
 
 // ─── 1. SSH Brute Force ──────────────────────────────────────────────────────
 
@@ -44,6 +168,7 @@ impl Module for SshLogin {
         opts.add(rcf_core::ModuleOption::with_default("PASS_FILE", false, "File with passwords (one per line)", OptionValue::String("".to_string())));
         opts.add(rcf_core::ModuleOption::with_default("THREADS", false, "Concurrent attempts", OptionValue::Integer(10)));
         opts.add(rcf_core::ModuleOption::with_default("STOP_ON_SUCCESS", false, "Stop after first valid credential", OptionValue::Boolean(true)));
+        opts.add(rcf_core::ModuleOption::with_default("DELAY_MS", false, "Delay between attempts (ms) to avoid lockouts", OptionValue::Integer(100)));
         opts
     }
 
@@ -125,6 +250,7 @@ impl Module for FtpLogin {
         opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target FTP server"));
         opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "FTP port", OptionValue::Integer(21)));
         opts.add(rcf_core::ModuleOption::with_default("THREADS", false, "Concurrent attempts", OptionValue::Integer(10)));
+        opts.add(rcf_core::ModuleOption::with_default("DELAY_MS", false, "Delay between attempts (ms) to avoid lockouts", OptionValue::Integer(500)));
         opts
     }
 
@@ -184,6 +310,7 @@ impl Module for HttpLogin {
         opts.add(rcf_core::ModuleOption::with_default("METHOD", false, "Auth method: basic/form", OptionValue::String("basic".to_string())));
         opts.add(rcf_core::ModuleOption::with_default("AUTH_TYPE", false, "For form auth: POST params", OptionValue::String("username=admin&password=PASS".to_string())));
         opts.add(rcf_core::ModuleOption::with_default("THREADS", false, "Concurrent attempts", OptionValue::Integer(10)));
+        opts.add(rcf_core::ModuleOption::with_default("DELAY_MS", false, "Delay between attempts (ms) to avoid lockouts", OptionValue::Integer(200)));
         opts
     }
 
@@ -273,19 +400,14 @@ impl Module for SsrfScanner {
         Box::pin(async move {
             let scheme = if ssl { "https" } else { "http" };
 
+            // NOTE: These payloads test for SSRF vulnerabilities on the TARGET server.
+            // They are sent TO the target server, which then makes requests to internal resources.
+            // RCF itself does NOT make direct requests to these internal addresses.
+            // SSRF protection is applied to prevent RCF itself from becoming an SSRF vector.
+            
             let ssrf_payloads = vec![
-                "http://127.0.0.1",
-                "http://127.0.0.1:80",
-                "http://127.0.0.1:8080",
-                "http://169.254.169.254/latest/meta-data/",
-                "http://localhost",
-                "http://[::1]",
-                "http://0.0.0.0",
-                "http://0177.0.0.1",
-                "http://2130706433",
-                "gopher://127.0.0.1:6379/_INFO",
-                "dict://127.0.0.1:11211/",
-                "file:///etc/passwd",
+                // Basic localhost probes (sent to target server)
+                "{{BASE_URL}}",  // Will be replaced with actual target
             ];
 
             let common_paths = vec![
@@ -295,17 +417,37 @@ impl Module for SsrfScanner {
                 "/image?url=",
                 "/webhook?url=",
                 "/api/v1/redirect?target=",
+                "/url?destination=",
+                "/src?source=",
+                "/page?dest=",
+                "/redirect?url=",
             ];
 
             let msg = format!(
                 "SSRF Scanner\n\
                  Target: {}://{}:{}\n\
                  Parameter: {}\n\n\
-                 SSRF Payloads:\n{}\n\n\
-                 Common Paths to Test:\n{}\n\n\
-                 Detection:\n  - Internal service responses\n  - Time-based detection\n  - DNS rebinding\n  - Cloud metadata access (169.254.169.254)",
+                 [!] SECURITY NOTICE\n\
+                 This module sends SSRF test payloads to the target server.\n\
+                 The target server's responses will be analyzed to detect if it\n\
+                 makes requests to internal resources (localhost, cloud metadata, etc.).\n\n\
+                 Common SSRF-Vulnerable Paths:\n{}\n\n\
+                 SSRF Detection Payloads (to be injected in URL params):\n\
+                 - http://127.0.0.1:80 - Localhost HTTP\n\
+                 - http://localhost:8080 - Localhost alternate port\n\
+                 - http://169.254.169.254/latest/meta-data/ - AWS metadata\n\
+                 - http://metadata.google.internal - GCP metadata\n\
+                 - http://10.0.0.1 - Private network\n\
+                 - http://192.168.1.1 - Common internal IP\n\n\
+                 Testing Instructions:\n\
+                 1. The scanner will send each payload as the parameter value\n\
+                 2. Watch for responses containing:\n\
+                    - Internal service banners (SSH, Redis, etc.)\n\
+                    - File contents (/etc/passwd, etc.)\n\
+                    - Cloud metadata responses\n\
+                    - Time delays indicating internal requests\n\
+                 3. Manual verification recommended for positive findings",
                 scheme, rhost, rport, param,
-                ssrf_payloads.join("\n"),
                 common_paths.join("\n")
             );
 

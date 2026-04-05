@@ -247,6 +247,40 @@ enum ReportCommands {
     },
 }
 
+/// Validate a file path to prevent writes to sensitive system locations.
+/// Uses canonicalization to resolve symlinks and relative paths.
+fn validate_write_path(path: &str) -> anyhow::Result<()> {
+    // Block obvious dangerous paths (case-insensitive prefix check)
+    let lower = path.to_lowercase();
+    let dangerous_prefixes = [
+        "/etc/", "/usr/", "/var/", "/root/", "/proc/", "/sys/",
+        "/system/", "/boot/", "/applications/",
+        "c:\\windows", "c:\\program files",
+    ];
+    
+    for prefix in dangerous_prefixes {
+        if lower.starts_with(prefix) {
+            anyhow::bail!("Output path targets a protected system directory: {}", path);
+        }
+    }
+
+    // Check for path traversal attempts
+    let p = std::path::Path::new(path);
+    if p.is_absolute() {
+        // Absolute paths are allowed but will be canonicalized later
+        return Ok(());
+    }
+
+    // For relative paths, limit parent directory traversal
+    let parent_count = path.split('/').filter(|&s| s == "..").count()
+        + path.split('\\').filter(|&s| s == "..").count();
+    if parent_count > 3 {
+        anyhow::bail!("Output path uses excessive parent directory traversal: {}", path);
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -530,10 +564,17 @@ async fn run_venom(
     // Save to file if requested
     if let Some(path) = output {
         // Validate path to prevent writes to sensitive system locations
-        let lower = path.to_lowercase();
-        if lower.starts_with("/etc/") || lower.starts_with("/usr/") || lower.starts_with("/var/")
-            || lower.starts_with("/root/") || lower.starts_with("/proc/") || lower.starts_with("/sys/") {
-            anyhow::bail!("Refusing to write payload to protected system directory: {}", path);
+        validate_write_path(path)?;
+        let canonical = std::fs::canonicalize(path).ok();
+        if let Some(real) = canonical {
+            let real_lower = real.to_string_lossy().to_lowercase();
+            if real_lower.contains("/etc/") || real_lower.contains("/usr/")
+                || real_lower.contains("/var/") || real_lower.contains("/root/")
+                || real_lower.contains("/proc/") || real_lower.contains("/sys/")
+                || real_lower.contains("/system/") || real_lower.contains("/boot/")
+                || real_lower.contains("/applications/") {
+                anyhow::bail!("Refusing to write payload to protected system directory");
+            }
         }
 
         let data = match out_format {
@@ -612,7 +653,13 @@ async fn run_scan(
         let host = target.host.clone();
 
         let handle = tokio::spawn(async move {
-            let _permit = sem.acquire().await.unwrap();
+            let permit = match sem.acquire().await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!("Failed to acquire semaphore: {}", e);
+                    return (host, vec![]);
+                }
+            };
             let config = ScanConfig::new(&host)
                 .with_ports(port_range)
                 .with_concurrency(1)
@@ -620,6 +667,7 @@ async fn run_scan(
             
             let scanner = TcpConnectScanner::new();
             let results = scanner.scan(&config).await;
+            drop(permit);
             (host, results)
         });
 
@@ -829,11 +877,18 @@ fn run_db(file: Option<&str>, command: &DbCommands) -> anyhow::Result<()> {
         }
 
         DbCommands::Export { output, format } => {
-            // Validate export path
-            let lower = output.to_lowercase();
-            if lower.starts_with("/etc/") || lower.starts_with("/usr/") || lower.starts_with("/var/")
-                || lower.starts_with("/root/") || lower.starts_with("/proc/") || lower.starts_with("/sys/") {
-                anyhow::bail!("Refusing to export database to protected system directory: {}", output);
+            // Validate export path with canonicalization
+            validate_write_path(output)?;
+            let canonical = std::fs::canonicalize(output).ok();
+            if let Some(real) = canonical {
+                let real_lower = real.to_string_lossy().to_lowercase();
+                if real_lower.contains("/etc/") || real_lower.contains("/usr/")
+                    || real_lower.contains("/var/") || real_lower.contains("/root/")
+                    || real_lower.contains("/proc/") || real_lower.contains("/sys/")
+                    || real_lower.contains("/system/") || real_lower.contains("/boot/")
+                    || real_lower.contains("/applications/") {
+                    anyhow::bail!("Refusing to export database to protected system directory");
+                }
             }
 
             let fmt: ExportFormat = format.parse().map_err(|e| anyhow::anyhow!("Invalid export format: {}", e))?;

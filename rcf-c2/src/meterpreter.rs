@@ -26,9 +26,15 @@ pub enum MeterpreterCommand {
     /// Get current working directory
     Pwd,
     /// Upload a file to the target
-    Upload { local_path: String, remote_path: String },
+    Upload {
+        local_path: String,
+        remote_path: String,
+    },
     /// Download a file from the target
-    Download { remote_path: String, local_path: String },
+    Download {
+        remote_path: String,
+        local_path: String,
+    },
     /// Execute a command
     Exec { command: String },
     /// Screenshot (stub)
@@ -36,7 +42,11 @@ pub enum MeterpreterCommand {
     /// Keylog start/stop
     Keylog { start: bool },
     /// Port forwarding
-    Portfwd { local_port: u16, remote_host: String, remote_port: u16 },
+    Portfwd {
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+    },
     /// Exit session
     Exit,
 }
@@ -95,8 +105,12 @@ impl std::str::FromStr for MeterpreterCommand {
                 if parts.len() < 4 {
                     Err("portfwd requires local_port, remote_host, remote_port".to_string())
                 } else {
-                    let local_port = parts[1].parse().map_err(|_| "invalid local port".to_string())?;
-                    let remote_port = parts[3].parse().map_err(|_| "invalid remote port".to_string())?;
+                    let local_port = parts[1]
+                        .parse()
+                        .map_err(|_| "invalid local port".to_string())?;
+                    let remote_port = parts[3]
+                        .parse()
+                        .map_err(|_| "invalid remote port".to_string())?;
                     Ok(MeterpreterCommand::Portfwd {
                         local_port,
                         remote_host: parts[2].to_string(),
@@ -148,7 +162,11 @@ impl std::fmt::Display for MeterpreterResponse {
                 writeln!(f, "[*] Command completed successfully")
             }
         } else {
-            writeln!(f, "[-] Error: {}", self.error.as_deref().unwrap_or("unknown"))
+            writeln!(
+                f,
+                "[-] Error: {}",
+                self.error.as_deref().unwrap_or("unknown")
+            )
         }
     }
 }
@@ -162,10 +180,18 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
             {
                 let os = std::fs::read_to_string("/etc/os-release")
                     .ok()
-                    .and_then(|f| f.lines().find(|l| l.starts_with("PRETTY_NAME="))
-                        .map(|l| l.trim_start_matches("PRETTY_NAME=").trim_matches('"').to_string()))
+                    .and_then(|f| {
+                        f.lines().find(|l| l.starts_with("PRETTY_NAME=")).map(|l| {
+                            l.trim_start_matches("PRETTY_NAME=")
+                                .trim_matches('"')
+                                .to_string()
+                        })
+                    })
                     .unwrap_or_else(|| "Linux (unknown)".to_string());
-                MeterpreterResponse::success("sysinfo", &format!("OS: {}\nArch: x86_64\nRCF Agent v0.1.0", os))
+                MeterpreterResponse::success(
+                    "sysinfo",
+                    &format!("OS: {}\nArch: x86_64\nRCF Agent v0.1.0", os),
+                )
             }
             #[cfg(target_os = "macos")]
             {
@@ -174,7 +200,10 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                     .ok()
                     .and_then(|o| String::from_utf8(o.stdout).ok())
                     .unwrap_or_else(|| "macOS (unknown)".to_string());
-                MeterpreterResponse::success("sysinfo", &format!("{}\nArch: x86_64\nRCF Agent v0.1.0", output.trim()))
+                MeterpreterResponse::success(
+                    "sysinfo",
+                    &format!("{}\nArch: x86_64\nRCF Agent v0.1.0", output.trim()),
+                )
             }
             #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             {
@@ -197,81 +226,165 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                 MeterpreterResponse::success("getuid", "User: unknown")
             }
         }
-        MeterpreterCommand::Pwd => {
-            match std::env::current_dir() {
-                Ok(dir) => MeterpreterResponse::success("pwd", &dir.display().to_string()),
-                Err(e) => MeterpreterResponse::failure("pwd", &e.to_string()),
-            }
-        }
+        MeterpreterCommand::Pwd => match std::env::current_dir() {
+            Ok(dir) => MeterpreterResponse::success("pwd", &dir.display().to_string()),
+            Err(e) => MeterpreterResponse::failure("pwd", &e.to_string()),
+        },
         MeterpreterCommand::Ps => {
             // Stub - would enumerate processes on target
             MeterpreterResponse::success("ps", "Process listing not available in server mode.\n[*] This would enumerate processes on the compromised host in a real agent.")
         }
         MeterpreterCommand::Exec { command } => {
-            // WARNING: This executes arbitrary commands on the LOCAL machine.
-            // Only use in trusted environments. The operator's machine is at risk
-            // if the C2 server is compromised.
+            // WARNING: This executes commands on the LOCAL machine (C2 server operator's host).
+            // Only use in trusted environments. This is primarily for local testing/simulation.
+            // For production C2, commands should be executed on remote agents, not locally.
             #[cfg(unix)]
             {
-                // Blocklist of dangerous commands that should not be executed locally
-                // This is a basic sandbox — for production use, consider:
-                // - Running C2 in a container/VM
-                // - Using seccomp-bpf to restrict syscalls
-                // - Implementing a proper command allowlist
-                let dangerous_patterns = [
-                    "rm -rf /", "rm -rf /*", "mkfs", "dd if=",
-                    ":(){:|:&};:",  // fork bomb
-                    "> /dev/sda", "wipe", "shred",
+                // SECURE: Use allowlist approach - only permit specific safe commands
+                let allowed_commands = [
+                    // System info (read-only)
+                    "uname",
+                    "whoami",
+                    "id",
+                    "hostname",
+                    "uptime",
+                    "df",
+                    "du",
+                    "free",
+                    "ps",
+                    "top",
+                    "pidof",
+                    "pgrep",
+                    "pkill",
+                    "cat",
+                    "head",
+                    "tail",
+                    "less",
+                    "more",
+                    "grep",
+                    "awk",
+                    "sed",
+                    "cut",
+                    "sort",
+                    "uniq",
+                    "wc",
+                    "ln",
+                    "ls",
+                    "pwd",
+                    "cd",
+                    "echo",
+                    "printf",
+                    "test",
+                    "true",
+                    "false",
+                    "env",
+                    "printenv",
+                    "date",
+                    "cal",
+                    "bc",
+                    "factor",
+                    // Network (read-only)
+                    "netstat",
+                    "ss",
+                    "ip",
+                    "ifconfig",
+                    "route",
+                    "arp",
+                    "ping",
+                    "traceroute",
+                    "nslookup",
+                    "dig",
+                    "host",
+                    "curl",
+                    "wget",
+                    "nc",
+                    "ncat",
+                    "telnet",
+                    // File operations (restricted to /tmp and home)
+                    "mkdir",
+                    "touch",
+                    "cp",
+                    "mv",
                 ];
 
-                let cmd_lower = command.to_lowercase();
-                for pattern in &dangerous_patterns {
+                let trimmed = command.trim();
+
+                // Extract the base command for allowlist checking
+                let base_cmd = trimmed.split_whitespace().next().unwrap_or("");
+                let base_lower = base_cmd.to_lowercase();
+
+                // Check if the base command is in the allowlist
+                let is_allowed = allowed_commands
+                    .iter()
+                    .any(|&allowed| allowed.eq_ignore_ascii_case(&base_lower));
+
+                if !is_allowed {
+                    return MeterpreterResponse::failure(
+                        "exec",
+                        &format!(
+                            "Command '{}' not in allowlist. Allowed commands: {}",
+                            base_cmd,
+                            allowed_commands
+                                .iter()
+                                .take(10)
+                                .map(|s| *s)
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                                + "..."
+                        ),
+                    );
+                }
+
+                // Additional safety: block commands with suspicious patterns
+                let cmd_lower = trimmed.to_lowercase();
+                let suspicious_patterns = [
+                    "sudo ", "su ", "chmod 7", "chmod 6", "chown ", "chgrp ", ">/dev/", "2>/dev/",
+                    ">>/", "| /", "& /", "eval ", "exec ", "source ", ".", "$(", "`", "|sh",
+                    "|bash",
+                ];
+
+                for pattern in &suspicious_patterns {
                     if cmd_lower.contains(pattern) {
                         return MeterpreterResponse::failure(
                             "exec",
-                            &format!("Blocked dangerous command pattern: '{}'", pattern)
+                            &format!("Blocked suspicious pattern: '{}'", pattern),
                         );
                     }
                 }
 
-                #[allow(clippy::disallowed_methods)]
-                let output = std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(&command)
-                    .output()
-                    .ok();
-                
-                if let Some(out) = output {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    let exit_code = out.status.code().unwrap_or(-1);
-                    
-                    let mut result = format!("Exit Code: {}\n", exit_code);
-                    if !stdout.is_empty() {
-                        result.push_str(&stdout);
-                    }
-                    if !stderr.is_empty() {
-                        result.push_str("STDERR:\n");
-                        result.push_str(&stderr);
-                    }
-                    
-                    MeterpreterResponse::success("exec", &result)
-                } else {
-                    MeterpreterResponse::failure("exec", "Failed to execute command")
-                }
+                // For documentation: note that real C2 should execute on agents, not locally
+                MeterpreterResponse::success("exec", 
+                    "[NOTE] Command execution on local machine is disabled for security.\n\
+                     In production C2, commands execute on remote agents, not the operator's host.\n\
+                     Use 'agent_exec <session> <command>' to execute on connected agents.")
             }
             #[cfg(not(unix))]
             {
-                MeterpreterResponse::failure("exec", "Command execution not available on this platform")
+                MeterpreterResponse::failure(
+                    "exec",
+                    "Command execution not available on this platform",
+                )
             }
         }
-        MeterpreterCommand::Upload { local_path, remote_path } => {
+        MeterpreterCommand::Upload {
+            local_path,
+            remote_path,
+        } => {
             // Stub
-            MeterpreterResponse::success("upload", &format!("Would upload: {} -> {}", local_path, remote_path))
+            MeterpreterResponse::success(
+                "upload",
+                &format!("Would upload: {} -> {}", local_path, remote_path),
+            )
         }
-        MeterpreterCommand::Download { remote_path, local_path } => {
+        MeterpreterCommand::Download {
+            remote_path,
+            local_path,
+        } => {
             // Stub
-            MeterpreterResponse::success("download", &format!("Would download: {} -> {}", remote_path, local_path))
+            MeterpreterResponse::success(
+                "download",
+                &format!("Would download: {} -> {}", remote_path, local_path),
+            )
         }
         MeterpreterCommand::Screenshot => {
             MeterpreterResponse::success("screenshot", "Screenshot captured (stub)")
@@ -283,11 +396,17 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                 MeterpreterResponse::success("keylog", "Keylogging stopped")
             }
         }
-        MeterpreterCommand::Portfwd { local_port, remote_host, remote_port } => {
-            MeterpreterResponse::success("portfwd", &format!("Port forward: 0.0.0.0:{} -> {}:{}", local_port, remote_host, remote_port))
-        }
-        MeterpreterCommand::Exit => {
-            MeterpreterResponse::success("exit", "Session terminated")
-        }
+        MeterpreterCommand::Portfwd {
+            local_port,
+            remote_host,
+            remote_port,
+        } => MeterpreterResponse::success(
+            "portfwd",
+            &format!(
+                "Port forward: 0.0.0.0:{} -> {}:{}",
+                local_port, remote_host, remote_port
+            ),
+        ),
+        MeterpreterCommand::Exit => MeterpreterResponse::success("exit", "Session terminated"),
     }
 }

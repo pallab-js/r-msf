@@ -4,6 +4,123 @@ use crate::encoder::PayloadEncoder;
 use crate::output::{OutputFormat, PayloadOutput};
 use crate::polymorphic::PolymorphicEngine;
 use crate::templates::{ShellcodeTemplate, get_template};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+/// Validates connection parameters to prevent payload generation for internal/private addresses.
+pub struct ConnectionValidator;
+
+impl ConnectionValidator {
+    /// Validate that an IP address is suitable for payload generation.
+    /// Returns Ok(()) if valid, Err(reason) if invalid.
+    pub fn validate_ip(ip: &str) -> anyhow::Result<()> {
+        let ip_lower = ip.to_lowercase();
+        
+        // Block localhost
+        let localhost_variants = [
+            "127.0.0.1", "localhost", "::1", "0.0.0.0",
+        ];
+        for variant in &localhost_variants {
+            if ip_lower == *variant {
+                anyhow::bail!(
+                    "Invalid payload IP: '{}' is localhost. Payloads cannot connect back to localhost.",
+                    ip
+                );
+            }
+        }
+        
+        // Parse and validate IP address
+        match ip.parse::<IpAddr>() {
+            Ok(IpAddr::V4(ipv4)) => {
+                if Self::is_private_or_reserved_ipv4(&ipv4) {
+                    anyhow::bail!(
+                        "Invalid payload IP: '{}' is a private/reserved address. \
+                         Use a public IP or properly configured tunnel IP.",
+                        ip
+                    );
+                }
+            }
+            Ok(IpAddr::V6(ipv6)) => {
+                if Self::is_private_or_reserved_ipv6(&ipv6) {
+                    anyhow::bail!(
+                        "Invalid payload IP: '{}' is a private/reserved IPv6 address.",
+                        ip
+                    );
+                }
+            }
+            Err(_) => {
+                anyhow::bail!("Invalid IP address format: '{}'", ip);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn is_private_or_reserved_ipv4(ip: &Ipv4Addr) -> bool {
+        let octets = ip.octets();
+        
+        // RFC 1918 Private
+        if octets[0] == 10 {
+            return true;
+        }
+        // 172.16.0.0 - 172.31.255.255
+        if octets[0] == 172 && (16..=31).contains(&octets[1]) {
+            return true;
+        }
+        // 192.168.0.0/16
+        if octets[0] == 192 && octets[1] == 168 {
+            return true;
+        }
+        
+        // RFC 3927 Link-local
+        if octets[0] == 169 && octets[1] == 254 {
+            return true;
+        }
+        
+        // RFC 5737 Documentation (TEST-NET-1, 2, 3)
+        if octets[0] == 192 && octets[1] == 0 && octets[2] == 2 {
+            return true;
+        }
+        if octets[0] == 198 && octets[1] == 51 && octets[2] == 100 {
+            return true;
+        }
+        if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 {
+            return true;
+        }
+        
+        // RFC 1112 Reserved (former multicast)
+        if octets[0] >= 224 && octets[0] <= 239 {
+            return true;
+        }
+        
+        // RFC 2544 Benchmarking
+        if octets[0] == 198 && octets[1] == 18 {
+            return true;
+        }
+        
+        false
+    }
+    
+    fn is_private_or_reserved_ipv6(ip: &Ipv6Addr) -> bool {
+        // Loopback ::1
+        if ip.is_loopback() {
+            return true;
+        }
+        // Unspecified ::ffff:0:0/96 (IPv4-mapped) - check via to_ipv4_mapped
+        if let Some(v4) = ip.to_ipv4_mapped() {
+            return Self::is_private_or_reserved_ipv4(&v4);
+        }
+        // Link-local fe80::
+        if ip.is_unicast_link_local() {
+            return true;
+        }
+        // Unique local fc00::/7
+        let segments = ip.segments();
+        if segments[0] & 0xfe00 == 0xfc00 {
+            return true;
+        }
+        false
+    }
+}
 
 /// Supported payload types.
 #[derive(Debug, Clone, PartialEq)]
@@ -215,6 +332,9 @@ impl PayloadGenerator {
     /// - `0x7e, 0x7e` — port placeholder (network byte order)
     fn patch_template(template: &ShellcodeTemplate, config: &PayloadConfig) -> anyhow::Result<Vec<u8>> {
         let mut shellcode = template.bytes.clone();
+
+        // SECURITY: Validate IP before using it in shellcode
+        ConnectionValidator::validate_ip(&config.lhost)?;
 
         // Replace IP address placeholder
         let ip_bytes = Self::ip_to_bytes(&config.lhost)?;

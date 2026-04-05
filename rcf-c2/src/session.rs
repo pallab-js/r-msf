@@ -200,6 +200,20 @@ impl SessionManager {
         }
     }
 
+    /// Kill all active sessions (for graceful shutdown).
+    pub async fn kill_all(&self) {
+        let mut sessions = self.sessions.write().await;
+        for (_, session) in sessions.iter_mut() {
+            if session.active {
+                // Send close command if there's a sender
+                if let Some(tx) = &session.command_tx {
+                    let _ = tx.send(SessionCommand::Close).await;
+                }
+                session.close();
+            }
+        }
+    }
+
     /// Send a command to a session.
     pub async fn send_command(&self, session_num: u32, command: &str) -> anyhow::Result<()> {
         let sessions = self.sessions.read().await;

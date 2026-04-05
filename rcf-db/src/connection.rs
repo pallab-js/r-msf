@@ -68,12 +68,14 @@ impl RcfDatabase {
     }
 
     /// Update host OS information.
-    pub fn update_host_os(&mut self, host_id: &str, os: &str, accuracy: &str) -> anyhow::Result<()> {
+    pub fn update_host_os(
+        &mut self,
+        host_id: &str,
+        os: &str,
+        accuracy: &str,
+    ) -> anyhow::Result<()> {
         diesel::update(hosts::table.filter(hosts::id.eq(host_id)))
-            .set((
-                hosts::os.eq(os),
-                hosts::os_accuracy.eq(accuracy),
-            ))
+            .set((hosts::os.eq(os), hosts::os_accuracy.eq(accuracy)))
             .execute(&mut self.conn)?;
         Ok(())
     }
@@ -104,10 +106,8 @@ impl RcfDatabase {
             .execute(&mut self.conn)?;
         diesel::delete(sessions::table.filter(sessions::host_id.eq(host_id)))
             .execute(&mut self.conn)?;
-        diesel::delete(loot::table.filter(loot::host_id.eq(host_id)))
-            .execute(&mut self.conn)?;
-        diesel::delete(hosts::table.filter(hosts::id.eq(host_id)))
-            .execute(&mut self.conn)?;
+        diesel::delete(loot::table.filter(loot::host_id.eq(host_id))).execute(&mut self.conn)?;
+        diesel::delete(hosts::table.filter(hosts::id.eq(host_id))).execute(&mut self.conn)?;
         Ok(())
     }
 
@@ -158,7 +158,10 @@ impl RcfDatabase {
             .optional()?;
 
         if existing.is_some() {
-            warn!("Duplicate credential skipped: {}@{}", cred.username, cred.host_id);
+            warn!(
+                "Duplicate credential skipped: {}@{}",
+                cred.username, cred.host_id
+            );
             return Ok(());
         }
 
@@ -166,13 +169,26 @@ impl RcfDatabase {
         let final_cred = if cred.password.starts_with("hash:") {
             cred
         } else {
-            use sha2::{Digest, Sha256};
-            let salt = format!("{}:{}:rcf_salt_2026", cred.host_id, cred.username);
-            let mut hasher = Sha256::new();
-            hasher.update(format!("{}{}", salt, cred.password));
-            let hash_hex = format!("{:x}", hasher.finalize());
+            // Use Argon2 for secure password hashing (memory-hard, resistant to GPU attacks)
+            use argon2::{
+                password_hash::{PasswordHasher, SaltString},
+                Argon2,
+            };
+            use rand::Rng;
+
+            // Generate a random salt using rand crate (compatible with argon2)
+            let mut salt_bytes = [0u8; 16];
+            rand::rng().fill(&mut salt_bytes);
+            let salt = SaltString::encode_b64(&salt_bytes)
+                .map_err(|e| anyhow::anyhow!("Failed to encode salt: {}", e))?;
+
+            let argon2 = Argon2::default();
+            let hash = argon2
+                .hash_password(cred.password.as_bytes(), &salt)
+                .map_err(|e| anyhow::anyhow!("Password hashing failed: {}", e))?;
+
             NewCredential {
-                password: format!("hash:sha256:{}", hash_hex),
+                password: format!("hash:argon2:{}", hash),
                 ..cred
             }
         };

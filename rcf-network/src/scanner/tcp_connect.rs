@@ -44,9 +44,15 @@ impl TcpConnectScanner {
             let ssl = config.ssl;
 
             let handle = tokio::spawn(async move {
-                let _permit = sem.acquire().await.unwrap();
+                let permit = match sem.acquire().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warn!("Failed to acquire semaphore: {}", e);
+                        return ScanResult::closed(port);
+                    }
+                };
                 let result = probe_port(&host, port, timeout_dur, ssl).await;
-                drop(_permit);
+                drop(permit);
                 result
             });
 

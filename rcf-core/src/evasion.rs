@@ -9,8 +9,6 @@
 use std::time::Duration;
 
 use rand::Rng;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 // ─── Timing Jitter ─────────────────────────────────────────────────────────
@@ -192,11 +190,11 @@ impl TlsConfig {
 }
 
 impl Default for TlsConfig {
-    /// Default: INSECURE (accepts invalid certs).
-    /// This is intentional for pentesting tools but should be documented.
-    /// Use `TlsConfig::strict()` for production use.
+    /// Default: STRICT (validates certificates).
+    /// This is the secure default. Use `TlsConfig::insecure()` only when
+    /// intentionally pentesting targets with invalid/missing certificates.
     fn default() -> Self {
-        Self::insecure()
+        Self::strict()
     }
 }
 

@@ -12,6 +12,7 @@ pub mod output;
 pub mod jobs;
 pub mod msf_compat;
 pub mod evasion;
+pub mod audit;
 
 pub use error::{RcfError, Result};
 pub use module::{Module, ModuleType, ModuleInfo, ModuleCategory};
@@ -20,3 +21,4 @@ pub use target::Target;
 pub use options::{ModuleOptions, ModuleOption, OptionValue};
 pub use output::{ModuleOutput, OutputFormat};
 pub use jobs::{JobManager, Job, JobStatus};
+pub use audit::{AuditLogger, AuditEntry, AuditLevel, AuditCategory};
