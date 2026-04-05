@@ -1,0 +1,33 @@
+[package]
+name = "rcf-cli"
+version.workspace = true
+edition.workspace = true
+description = "CLI entry point for the Rust Cybersecurity Framework"
+
+[[bin]]
+name = "rcf"
+path = "src/main.rs"
+
+[features]
+default = ["db", "c2"]
+db = ["rcf-db", "chrono"]
+c2 = ["rcf-c2"]
+
+[dependencies]
+rcf-core = { path = "../rcf-core", features = ["reqwest"] }
+rcf-console = { path = "../rcf-console" }
+rcf-modules = { path = "../rcf-modules" }
+rcf-network = { path = "../rcf-network" }
+rcf-payload = { path = "../rcf-payload" }
+rcf-db = { path = "../rcf-db", optional = true }
+rcf-c2 = { path = "../rcf-c2", optional = true }
+rcf-labs = { path = "../rcf-labs" }
+clap = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+colored = { workspace = true }
+serde_json = { workspace = true }
+dirs = "6"
+chrono = { version = "0.4", optional = true }

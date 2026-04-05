@@ -1,0 +1,19 @@
+[package]
+name = "rcf-labs"
+version.workspace = true
+edition.workspace = true
+description = "Lab exploit modules for HTB/THM/PortSwigger/OffSec"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+colored = { workspace = true }
+reqwest = { version = "0.12", features = ["rustls-tls", "blocking", "multipart", "json"] }
+futures = "0.3"
+urlencoding = "2"
+regex = "1"

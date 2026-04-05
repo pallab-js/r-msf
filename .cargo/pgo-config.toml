@@ -1,0 +1,30 @@
+# Profile-Guided Optimization (PGO) configuration for RCF.
+#
+# PGO improves performance by 10-15% by collecting runtime profiling data
+# and using it to guide optimization decisions.
+#
+# Usage:
+#   1. Build with instrumentation:
+#      RUSTFLAGS="-Cprofile-generate=/tmp/pgo-data" cargo build --release -p rcf-cli
+#
+#   2. Run typical workloads to collect profile data:
+#      ./target/release/rcf scan -t 127.0.0.1 --ports common
+#      ./target/release/rcf venom -p reverse_tcp --lhost 10.0.0.1 --lport 4444
+#      ./target/release/rcf search scanner
+#      ./target/release/rcf db stats
+#
+#   3. Merge profile data:
+#      llvm-profdata merge -output=merged.profdata /tmp/pgo-data/
+#
+#   4. Build with PGO:
+#      RUSTFLAGS="-Cprofile-use=/tmp/merged.profdata" cargo build --release -p rcf-cli
+#
+# The resulting binary will be 10-15% faster for common workloads.
+
+[build]
+# Default release profile is defined in the root Cargo.toml
+# PGO is applied via RUSTFLAGS environment variable
+
+[profile.release-pgo]
+inherits = "release"
+# PGO-specific settings are applied via RUSTFLAGS

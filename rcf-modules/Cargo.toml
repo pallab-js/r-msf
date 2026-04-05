@@ -1,0 +1,17 @@
+[package]
+name = "rcf-modules"
+version.workspace = true
+edition.workspace = true
+description = "Module registry and plugin system for RCF"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+rcf-labs = { path = "../rcf-labs" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+libloading = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+colored = { workspace = true }

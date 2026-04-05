@@ -1,0 +1,19 @@
+[package]
+name = "rcf-console"
+version.workspace = true
+edition.workspace = true
+description = "Interactive REPL console for the Rust Cybersecurity Framework"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+rcf-modules = { path = "../rcf-modules" }
+rustyline = { workspace = true }
+colored = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+dirs = "6"

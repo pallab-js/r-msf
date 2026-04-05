@@ -1,0 +1,22 @@
+[package]
+name = "rcf-c2"
+version.workspace = true
+edition.workspace = true
+description = "Command and control server and session management for RCF"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+rcf-db = { path = "../rcf-db" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+colored = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

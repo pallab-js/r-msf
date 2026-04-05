@@ -1,0 +1,22 @@
+[package]
+name = "rcf-payload"
+version.workspace = true
+edition.workspace = true
+description = "Payload generator and compiler (RCF-Venom)"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+rcf-modules = { path = "../rcf-modules" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+byteorder = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+base64 = "0.22"
+tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

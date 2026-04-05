@@ -1,0 +1,20 @@
+[package]
+name = "rcf-db"
+version.workspace = true
+edition.workspace = true
+description = "Database layer for host tracking, credentials, and session management"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+diesel = { version = "2", features = ["sqlite", "chrono", "uuid"] }
+diesel_migrations = "2"
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = { workspace = true }
+csv = "1"
+sha2 = "0.10"

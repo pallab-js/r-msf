@@ -1,0 +1,24 @@
+[package]
+name = "rcf-network"
+version.workspace = true
+edition.workspace = true
+description = "Async networking primitives for scanning and protocol handling"
+
+[dependencies]
+rcf-core = { path = "../rcf-core" }
+rcf-modules = { path = "../rcf-modules" }
+tokio = { workspace = true }
+socket2 = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+futures = "0.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Raw socket scanning (requires root)
+pnet = { version = "0.35", optional = true }
+pnet_macros = { version = "0.35", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

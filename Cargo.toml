@@ -1,0 +1,73 @@
+[workspace]
+members = [
+    "rcf-core",
+    "rcf-console",
+    "rcf-modules",
+    "rcf-network",
+    "rcf-payload",
+    "rcf-db",
+    "rcf-c2",
+    "rcf-labs",
+    "rcf-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["RCF Contributors"]
+license = "BSD-3-Clause"
+repository = "https://github.com/rcf/rcf"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+rustyline = "15"
+colored = "3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Plugin system
+libloading = "0.8"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Database (Phase 4)
+diesel = { version = "2", features = ["sqlite"] }
+libsqlite3-sys = { version = "0.30", features = ["bundled"] }
+
+# Networking (Phase 2)
+reqwest = { version = "0.12", features = ["rustls-tls"] }
+socket2 = "0.5"
+
+# Payload generation (Phase 3)
+rand = "0.9"
+byteorder = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Profile for minimal binary size
+[profile.release]
+opt-level = "z"
+lto = "fat"
+panic = "abort"
+strip = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+debug = true

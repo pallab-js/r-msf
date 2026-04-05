@@ -1,0 +1,212 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ─── Lint & Test ──────────────────────────────────────────────────
+  check:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Format check
+        run: cargo fmt -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace
+
+  # ─── Native Builds ────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux x86_64
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build --release -p rcf-cli
+
+      - name: Test binary
+        run: |
+          ./target/release/rcf --version
+          ./target/release/rcf --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rcf-linux-x86_64
+          path: target/release/rcf
+
+  build-macos-aarch64:
+    name: Build macOS ARM64
+    runs-on: macos-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build --release -p rcf-cli
+
+      - name: Test binary
+        run: |
+          ./target/release/rcf --version
+          ./target/release/rcf --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rcf-macos-aarch64
+          path: target/release/rcf
+
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Add Windows target
+        run: rustup target add x86_64-pc-windows-gnu
+
+      - name: Install MinGW
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-x86_64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release
+        run: cargo build --release -p rcf-cli --target x86_64-pc-windows-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rcf-windows-x86_64
+          path: target/x86_64-pc-windows-gnu/release/rcf.exe
+
+  build-linux-aarch64:
+    name: Build Linux ARM64
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Add ARM64 target
+        run: rustup target add aarch64-unknown-linux-gnu
+
+      - name: Install cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-aarch64-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Configure linker
+        run: |
+          mkdir -p .cargo
+          cat >> .cargo/config.toml << 'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+
+      - name: Build release
+        run: cargo build --release -p rcf-cli --target aarch64-unknown-linux-gnu
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rcf-linux-aarch64
+          path: target/aarch64-unknown-linux-gnu/release/rcf
+
+  # ─── Release Upload ───────────────────────────────────────────────
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos-aarch64, build-windows, build-linux-aarch64]
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Package binaries
+        run: |
+          mkdir -p release
+          mv rcf-linux-x86_64/rcf release/rcf-linux-x86_64
+          mv rcf-macos-aarch64/rcf release/rcf-macos-aarch64
+          mv rcf-windows-x86_64/rcf.exe release/rcf-windows-x86_64.exe
+          mv rcf-linux-aarch64/rcf release/rcf-linux-aarch64
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
