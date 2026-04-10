@@ -55,7 +55,7 @@ impl std::str::FromStr for MeterpreterCommand {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = s.trim().split_whitespace().collect();
+        let parts: Vec<&str> = s.split_whitespace().collect();
         if parts.is_empty() {
             return Err("empty command".to_string());
         }
@@ -240,7 +240,7 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
             // For production C2, commands should be executed on remote agents, not locally.
             #[cfg(unix)]
             {
-                // SECURE: Use allowlist approach - only permit specific safe commands
+                // SECURE: Use allowlist approach — only permit specific safe read-only commands
                 let allowed_commands = [
                     // System info (read-only)
                     "uname",
@@ -283,7 +283,7 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                     "cal",
                     "bc",
                     "factor",
-                    // Network (read-only)
+                    // Network (read-only — no download/upload tools)
                     "netstat",
                     "ss",
                     "ip",
@@ -295,16 +295,10 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                     "nslookup",
                     "dig",
                     "host",
-                    "curl",
-                    "wget",
-                    "nc",
-                    "ncat",
-                    "telnet",
-                    // File operations (restricted to /tmp and home)
+                    // File operations (read-only or restricted)
                     "mkdir",
                     "touch",
-                    "cp",
-                    "mv",
+                    "find",
                 ];
 
                 let trimmed = command.trim();
@@ -327,7 +321,7 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                             allowed_commands
                                 .iter()
                                 .take(10)
-                                .map(|s| *s)
+                                .copied()
                                 .collect::<Vec<_>>()
                                 .join(", ")
                                 + "..."
@@ -338,9 +332,10 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                 // Additional safety: block commands with suspicious patterns
                 let cmd_lower = trimmed.to_lowercase();
                 let suspicious_patterns = [
-                    "sudo ", "su ", "chmod 7", "chmod 6", "chown ", "chgrp ", ">/dev/", "2>/dev/",
+                    "sudo ", "su ", "chmod ", "chown ", "chgrp ", ">/dev/", "2>/dev/",
                     ">>/", "| /", "& /", "eval ", "exec ", "source ", ".", "$(", "`", "|sh",
-                    "|bash",
+                    "|bash", "mkfs", "dd ", "fdisk", "parted", "cryptsetup",
+                    "curl ", "wget ", "nc ", "ncat ", "telnet ",
                 ];
 
                 for pattern in &suspicious_patterns {

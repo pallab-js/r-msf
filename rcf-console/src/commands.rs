@@ -25,6 +25,9 @@ pub enum Command {
     Reload,
     Save { path: Option<String> },
     Load { path: Option<String> },
+    SetGlobal { key: String, value: String },
+    UnsetGlobal { key: String },
+    Resource { path: Option<String> },
     Custom { parts: Vec<String> },
 }
 
@@ -141,6 +144,38 @@ pub fn parse_command(line: &str) -> Command {
         "load" => {
             let path = args.first().cloned();
             Command::Load { path }
+        }
+
+        "setg" | "gset" => {
+            // Global variable setting
+            if args.len() >= 2 {
+                Command::SetGlobal {
+                    key: args[0].to_uppercase(),
+                    value: args[1..].join(" "),
+                }
+            } else {
+                Command::SetGlobal {
+                    key: String::new(),
+                    value: String::new(),
+                }
+            }
+        }
+
+        "unsetg" | "gunset" => {
+            if let Some(key) = args.first() {
+                Command::UnsetGlobal {
+                    key: key.to_uppercase(),
+                }
+            } else {
+                Command::UnsetGlobal {
+                    key: String::new(),
+                }
+            }
+        }
+
+        "resource" | "run_script" => {
+            let path = args.first().cloned();
+            Command::Resource { path }
         }
 
         _ => Command::Custom {

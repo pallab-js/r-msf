@@ -7,6 +7,7 @@ description = "Interactive REPL console for the Rust Cybersecurity Framework"
 [dependencies]
 rcf-core = { path = "../rcf-core" }
 rcf-modules = { path = "../rcf-modules" }
+rcf-c2 = { path = "../rcf-c2" }
 rustyline = { workspace = true }
 colored = { workspace = true }
 ratatui = { workspace = true }
@@ -16,4 +17,5 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+chrono = "0.4"
 dirs = "6"

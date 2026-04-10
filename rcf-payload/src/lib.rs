@@ -5,7 +5,7 @@
 //! - Windows (x86, x64)
 //! - macOS (x86_64, ARM64)
 //!
-//! Supports encoding, encryption, and polymorphic obfuscation.
+//! Supports encoding, encryption, polymorphic obfuscation, and staged delivery.
 
 pub mod generator;
 pub mod encoder;
@@ -14,6 +14,7 @@ pub mod polymorphic;
 pub mod output;
 pub mod pe_builder;
 pub mod executor;
+pub mod stager;
 
 pub use generator::{PayloadConfig, PayloadType, PayloadGenerator, Platform, Arch};
 pub use encoder::PayloadEncoder;
@@ -21,3 +22,4 @@ pub use polymorphic::PolymorphicEngine;
 pub use output::{OutputFormat, PayloadOutput};
 pub use pe_builder::PeBuilder;
 pub use executor::{PayloadExecutor, ExecutionResult};
+pub use stager::{StageServer, generate_stager, test_stager_connection};

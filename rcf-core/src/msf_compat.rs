@@ -101,7 +101,7 @@ impl MsfModuleParser {
     pub fn generate_rcf_stub(&self, info: &MsfModuleInfo) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("//! Auto-generated RCF module from Metasploit\n"));
+        output.push_str("//! Auto-generated RCF module from Metasploit\n");
         output.push_str(&format!("//! Source: {}\n\n", info.name));
 
         output.push_str("use std::pin::Pin;\n");
@@ -111,11 +111,11 @@ impl MsfModuleParser {
         output.push_str("    ModuleOutput, Result, Target,\n");
         output.push_str("};\n\n");
 
-        output.push_str(&format!(
-            "static INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {{\n"
-        ));
+        output.push_str(
+            "static INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {{\n",
+        );
         output.push_str(&format!("    name: \"{}\".to_string(),\n", info.name));
-        output.push_str(&format!("    display_name: \"{}\".to_string(),\n", info.name.split('/').last().unwrap_or(&info.name)));
+        output.push_str(&format!("    display_name: \"{}\".to_string(),\n", info.name.split('/').next_back().unwrap_or(&info.name)));
         output.push_str(&format!("    description: \"{}\".to_string(),\n", info.description.replace('"', "\\\"")));
         output.push_str("    authors: vec![\n");
         for author in &info.authors {
@@ -155,7 +155,7 @@ impl MsfModuleParser {
         // Generate module struct
         let struct_name = info.name
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or("ImportedModule")
             .chars()
             .map(|c| if c.is_alphanumeric() { c } else { '_' })
@@ -177,12 +177,12 @@ impl MsfModuleParser {
         output.push_str("        let mut opts = ModuleOptions::new();\n");
 
         for (key, value) in &info.default_options {
-            output.push_str(&format!(
-                "        opts.add(rcf_core::ModuleOption::with_default(\n"
-            ));
+            output.push_str(
+                "        opts.add(rcf_core::ModuleOption::with_default(\n",
+            );
             output.push_str(&format!("            \"{}\",\n", key));
             output.push_str("            false,\n");
-            output.push_str(&format!("            \"Imported from Metasploit\",\n"));
+            output.push_str("            \"Imported from Metasploit\",\n");
             output.push_str(&format!("            rcf_core::OptionValue::String(\"{}\".to_string()),\n", value));
             output.push_str("        ));\n");
         }
@@ -220,15 +220,14 @@ fn extract_quoted_field(content: &str, field: &str) -> Option<String> {
     if let Some(pos) = content.find(&field_pattern) {
         let after = &content[pos + field_pattern.len()..];
         let trimmed = after.trim_start();
-        if trimmed.starts_with('"') {
-            if let Some(end) = trimmed[1..].find('"') {
-                return Some(trimmed[1..end + 1].to_string());
+        if let Some(stripped) = trimmed.strip_prefix('"') {
+            if let Some(end) = stripped.find('"') {
+                return Some(stripped[..end].to_string());
             }
-        } else if trimmed.starts_with('\'') {
-            if let Some(end) = trimmed[1..].find('\'') {
-                return Some(trimmed[1..end + 1].to_string());
+        } else if let Some(stripped) = trimmed.strip_prefix('\'')
+            && let Some(end) = stripped.find('\'') {
+                return Some(stripped[..end].to_string());
             }
-        }
     }
     None
 }
@@ -241,8 +240,8 @@ fn extract_author_array(content: &str) -> Vec<String> {
         .or_else(|| content.find("\"Author\""))
     {
         let after = &content[pos..];
-        if let Some(start) = after.find('[') {
-            if let Some(end) = after[start..].find(']') {
+        if let Some(start) = after.find('[')
+            && let Some(end) = after[start..].find(']') {
                 let array_content = &after[start + 1..start + end];
                 for author in array_content.split(',') {
                     let author = author.trim().trim_matches(|c| c == '\'' || c == '"');
@@ -251,7 +250,6 @@ fn extract_author_array(content: &str) -> Vec<String> {
                     }
                 }
             }
-        }
     }
 
     authors
@@ -325,8 +323,8 @@ fn extract_platforms(content: &str) -> Vec<String> {
     {
         let after = &content[pos..];
         // Try array format: 'Platform' => ['win', 'linux']
-        if let Some(start) = after.find('[') {
-            if let Some(end) = after[start..].find(']') {
+        if let Some(start) = after.find('[')
+            && let Some(end) = after[start..].find(']') {
                 let array_content = &after[start + 1..start + end];
                 for platform in array_content.split(',') {
                     let p = platform.trim().trim_matches(|c| c == '\'' || c == '"');
@@ -335,10 +333,9 @@ fn extract_platforms(content: &str) -> Vec<String> {
                     }
                 }
             }
-        }
         // Try hash format: 'Platform' => { 'win' => [ ... ] }
-        else if let Some(start) = after.find('{') {
-            if let Some(end) = after[start..].find('}') {
+        else if let Some(start) = after.find('{')
+            && let Some(end) = after[start..].find('}') {
                 let hash_content = &after[start + 1..start + end];
                 for key in hash_content.split(',') {
                     let key = key.trim().trim_matches(|c| c == '\'' || c == '"');
@@ -347,7 +344,6 @@ fn extract_platforms(content: &str) -> Vec<String> {
                     }
                 }
             }
-        }
     }
 
     platforms
@@ -360,8 +356,8 @@ fn extract_architectures(content: &str) -> Vec<String> {
         .or_else(|| content.find("\"Arch\""))
     {
         let after = &content[pos..];
-        if let Some(start) = after.find('[') {
-            if let Some(end) = after[start..].find(']') {
+        if let Some(start) = after.find('[')
+            && let Some(end) = after[start..].find(']') {
                 let array_content = &after[start + 1..start + end];
                 for arch in array_content.split(',') {
                     let a = arch.trim().trim_matches(|c| c == '\'' || c == '"');
@@ -370,7 +366,6 @@ fn extract_architectures(content: &str) -> Vec<String> {
                     }
                 }
             }
-        }
     }
 
     archs

@@ -11,8 +11,10 @@ pub mod server;
 pub mod session;
 pub mod handler;
 pub mod meterpreter;
+pub mod control;
 
 pub use server::C2Server;
 pub use session::{Session, SessionManager, SessionType};
 pub use handler::SessionHandler;
 pub use meterpreter::{MeterpreterCommand, MeterpreterResponse, execute_meterpreter_command};
+pub use control::{C2ControlClient, start_control_server};

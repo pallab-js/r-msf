@@ -3,13 +3,54 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
+use std::collections::VecDeque;
 
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tracing::{info, warn, error};
 
 use crate::session::{SessionManager, SessionType, SessionCommand};
 use crate::handler::SessionHandler;
+
+/// Sliding window rate limiter — tracks connections in a time window.
+struct SlidingWindowRateLimiter {
+    connections: Mutex<VecDeque<std::time::Instant>>,
+    window: Duration,
+    max_per_window: usize,
+}
+
+impl SlidingWindowRateLimiter {
+    fn new(window: Duration, max_per_window: usize) -> Self {
+        Self {
+            connections: Mutex::new(VecDeque::new()),
+            window,
+            max_per_window,
+        }
+    }
+
+    /// Check if a connection is allowed. Returns true if allowed, false if rate limited.
+    async fn allow(&self) -> bool {
+        let now = std::time::Instant::now();
+        let mut conns = self.connections.lock().await;
+
+        // Remove expired entries outside the window
+        while let Some(&ts) = conns.front() {
+            if now.duration_since(ts) > self.window {
+                conns.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        if conns.len() >= self.max_per_window {
+            false
+        } else {
+            conns.push_back(now);
+            true
+        }
+    }
+}
 
 /// C2 Server configuration.
 #[derive(Debug, Clone)]
@@ -23,6 +64,8 @@ pub struct C2Config {
     pub psk: Option<String>,
     /// Enable TLS for encrypted connections
     pub use_tls: bool,
+    /// Control port for console interaction (None = listen_port + 1)
+    pub control_port: Option<u16>,
 }
 
 impl C2Config {
@@ -35,72 +78,80 @@ impl C2Config {
             shutdown_timeout_secs: 10,
             psk: None,
             use_tls: false,
+            control_port: None,
         }
     }
-    
+
     /// Set a pre-shared key for agent authentication.
     pub fn with_psk(mut self, psk: String) -> Self {
         self.psk = Some(psk);
         self
     }
-    
+
     /// Enable TLS encryption for connections.
     pub fn with_tls(mut self) -> Self {
         self.use_tls = true;
+        self
+    }
+
+    /// Set the control port for console interaction.
+    pub fn with_control_port(mut self, port: u16) -> Self {
+        self.control_port = Some(port);
         self
     }
 }
 
 /// Represents an authenticated agent connection.
 #[derive(Debug)]
-struct AuthenticatedSession {
-    session_num: u32,
-    peer_addr: SocketAddr,
-    authenticated_at: i64,
+pub struct AuthenticatedSession {
+    pub session_num: u32,
+    pub peer_addr: SocketAddr,
+    pub authenticated_at: i64,
 }
 
-/// Authentication message from agent.
-const AUTH_CHALLENGE: &[u8] = b"RCF_AUTH_REQUEST";
-const AUTH_RESPONSE: &[u8] = b"RCF_AUTH_OK";
-
 impl C2Server {
-    /// Authenticate an incoming connection.
+    /// Authenticate an incoming connection using PSK verification.
     /// Returns Ok(()) if authenticated or auth is not required.
     /// Returns Err(reason) if authentication fails.
     async fn authenticate_connection(
         socket: &mut tokio::net::TcpStream,
         peer_addr: SocketAddr,
+        psk: &Option<String>,
     ) -> anyhow::Result<()> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        
-        let mut buf = [0u8; 64];
-        
+
+        let mut buf = [0u8; 256];
+
         // Read initial message from agent
         let n = socket.read(&mut buf).await?;
         if n == 0 {
             anyhow::bail!("Connection closed during authentication");
         }
-        
+
         let client_msg = String::from_utf8_lossy(&buf[..n]);
         let client_msg = client_msg.trim();
-        
-        // Check for expected auth message
+
+        // Check for expected agent greeting prefix
         if !client_msg.starts_with("RCF_AGENT_V1:") {
-            // Not a valid RCF agent
             warn!("Invalid agent greeting from {}: {}", peer_addr, client_msg);
-            
-            // Send rejection
             socket.write_all(b"INVALID_AGENT\n").await?;
             anyhow::bail!("Invalid agent greeting");
         }
-        
-        // For now, accept any valid agent greeting
-        // TODO: Implement PSK verification
+
+        // Extract PSK from greeting: "RCF_AGENT_V1:<psk>"
+        let provided_psk = &client_msg["RCF_AGENT_V1:".len()..];
+
+        // Verify PSK if configured
+        if let Some(expected_psk) = psk
+            && provided_psk != expected_psk {
+                warn!("PSK mismatch from {}: invalid key provided", peer_addr);
+                socket.write_all(b"AUTH_FAILED\n").await?;
+                anyhow::bail!("PSK mismatch");
+            }
+
         info!("Agent {} authenticated successfully", peer_addr);
-        
-        // Send acknowledgment
         socket.write_all(b"RCF_AUTH_SUCCESS\n").await?;
-        
+
         Ok(())
     }
 }
@@ -111,8 +162,7 @@ pub struct C2Server {
     sessions: Arc<SessionManager>,
     running: Arc<tokio::sync::Notify>,
     shutdown_triggered: Arc<std::sync::atomic::AtomicBool>,
-    connection_count: Arc<std::sync::atomic::AtomicU64>,
-    rate_limiter: Arc<tokio::sync::Mutex<()>>,
+    rate_limiter: SlidingWindowRateLimiter,
 }
 
 impl C2Server {
@@ -122,8 +172,11 @@ impl C2Server {
             sessions,
             running: Arc::new(tokio::sync::Notify::new()),
             shutdown_triggered: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            connection_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            rate_limiter: Arc::new(tokio::sync::Mutex::new(())),
+            // Sliding window: 100 connections per 60 seconds
+            rate_limiter: SlidingWindowRateLimiter::new(
+                Duration::from_secs(60),
+                100,
+            ),
         }
     }
 
@@ -138,6 +191,23 @@ impl C2Server {
             "C2 server listening for connections"
         );
 
+        // Start control server for console interaction
+        let control_port = self.config.control_port.unwrap_or(self.config.listen_port + 1);
+        let sessions_clone = Arc::clone(&self.sessions);
+        let control_addr = format!("{}:{}", self.config.listen_addr, control_port);
+        let listen_addr = self.config.listen_addr.clone();
+        info!("C2 control server listening on {} (for console interaction)", control_addr);
+
+        let _control_handle = tokio::spawn(async move {
+            if let Err(e) = crate::control::start_control_server(
+                &listen_addr,
+                control_port,
+                sessions_clone,
+            ).await {
+                error!("Control server error: {}", e);
+            }
+        });
+
         loop {
             tokio::select! {
                 _ = self.running.notified() => {
@@ -150,19 +220,16 @@ impl C2Server {
                     if self.shutdown_triggered.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    
+
                     match result {
                         Ok((mut socket, peer_addr)) => {
-                            // Rate limiting: simple connection throttling
-                            let _rate_limit_guard = self.rate_limiter.lock().await;
-                            
-                            // Increment connection counter
-                            let conn_count = self.connection_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            if conn_count > 1000 {
-                                warn!("High connection count ({}), rate limiting", conn_count);
-                                tokio::time::sleep(Duration::from_millis(100)).await;
+                            // Rate limiting using sliding window
+                            if !self.rate_limiter.allow().await {
+                                warn!("Rate limiting connection from {} (too many connections in window)", peer_addr);
+                                // Silently drop — don't waste resources on rate-limited connections
+                                continue;
                             }
-                            
+
                             let session_count = self.sessions.active_count().await;
                             if session_count >= self.config.max_sessions {
                                 warn!("Max sessions reached ({}), rejecting {}", session_count, peer_addr);
@@ -170,9 +237,10 @@ impl C2Server {
                             }
 
                             info!("New connection from {}", peer_addr);
-                            
+
                             // Authenticate connection
-                            if let Err(e) = Self::authenticate_connection(&mut socket, peer_addr).await {
+                            let psk = self.config.psk.clone();
+                            if let Err(e) = Self::authenticate_connection(&mut socket, peer_addr, &psk).await {
                                 warn!("Connection from {} failed authentication: {}", peer_addr, e);
                                 continue;
                             }

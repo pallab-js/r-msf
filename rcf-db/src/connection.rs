@@ -21,8 +21,29 @@ impl RcfDatabase {
     /// Create or open a database at the given path.
     ///
     /// Use `:memory:` for an in-memory database (testing).
+    ///
+    /// # Security
+    /// Sets file permissions to 0600 (owner read/write only) on Unix systems
+    /// to protect credential data from unauthorized access.
     pub fn new(path: &str) -> anyhow::Result<Self> {
+        // Check if this is a new database file
+        let is_new_file = !std::path::Path::new(path).exists() && path != ":memory:";
+
         let conn = SqliteConnection::establish(path)?;
+
+        // Set restrictive permissions on new database files (Unix only)
+        if is_new_file {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    let mut perms = metadata.permissions();
+                    perms.set_mode(0o600); // Owner read/write only
+                    let _ = std::fs::set_permissions(path, perms);
+                }
+            }
+        }
+
         info!("Connected to database at {}", path);
         Ok(Self {
             conn,
@@ -174,11 +195,11 @@ impl RcfDatabase {
                 password_hash::{PasswordHasher, SaltString},
                 Argon2,
             };
-            use rand::Rng;
 
-            // Generate a random salt using rand crate (compatible with argon2)
+            // Generate a cryptographically secure random salt using getrandom
             let mut salt_bytes = [0u8; 16];
-            rand::rng().fill(&mut salt_bytes);
+            getrandom::getrandom(&mut salt_bytes)
+                .map_err(|e| anyhow::anyhow!("Failed to generate random salt: {}", e))?;
             let salt = SaltString::encode_b64(&salt_bytes)
                 .map_err(|e| anyhow::anyhow!("Failed to encode salt: {}", e))?;
 

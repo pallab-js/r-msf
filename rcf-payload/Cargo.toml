@@ -3,6 +3,7 @@ name = "rcf-payload"
 version.workspace = true
 edition.workspace = true
 description = "Payload generator and compiler (RCF-Venom)"
+build = "build.rs"
 
 [dependencies]
 rcf-core = { path = "../rcf-core" }

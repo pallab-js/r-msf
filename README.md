@@ -7,9 +7,7 @@
 
 > **Fast. Safe. Modular. Rust.**
 
-A modular, async-first Rust cybersecurity framework that compiles to a single ~4.7MB binary.
-Designed as a modern alternative to Metasploit — with zero-cost abstractions, memory safety,
-and 56+ modules for authorized security testing.
+**RCF (Rust Cybersecurity Framework)** is a modern, async-first cybersecurity framework built for speed, memory safety, and modularity. Compiling to a single ~4.7MB binary, it serves as a robust alternative to legacy tools, providing 56+ modules for authorized security testing, exploitation, and post-exploitation.
 
 ## ⚡ Quick Start
 

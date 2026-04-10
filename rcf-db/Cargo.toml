@@ -19,4 +19,4 @@ tracing = { workspace = true }
 csv = "1"
 sha2 = "0.10"
 argon2 = "0.5"
-rand = "0.9"
+getrandom = "0.2"

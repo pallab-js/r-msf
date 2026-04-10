@@ -119,6 +119,8 @@ pub struct SessionOutput {
 pub struct SessionManager {
     sessions: Arc<RwLock<HashMap<u32, Session>>>,
     next_num: Arc<Mutex<u32>>,
+    /// Output subscribers for each session — console can subscribe to see agent output
+    output_subscribers: Arc<RwLock<HashMap<u32, Vec<tokio::sync::mpsc::Sender<String>>>>>,
 }
 
 impl SessionManager {
@@ -126,6 +128,32 @@ impl SessionManager {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             next_num: Arc::new(Mutex::new(1)),
+            output_subscribers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Subscribe to a session's output channel.
+    /// Returns a receiver that will receive base64-encoded output blocks.
+    pub async fn subscribe_output(&self, session_id: u32) -> tokio::sync::mpsc::Receiver<String> {
+        let (tx, rx) = tokio::sync::mpsc::channel(256);
+        let mut subs = self.output_subscribers.write().await;
+        subs.entry(session_id).or_default().push(tx);
+        rx
+    }
+
+    /// Remove all output subscribers for a session.
+    pub async fn unsubscribe_output(&self, session_id: u32) {
+        let mut subs = self.output_subscribers.write().await;
+        subs.remove(&session_id);
+    }
+
+    /// Send output to all subscribers of a session.
+    pub async fn broadcast_output(&self, session_id: u32, output: &str) {
+        let subs = self.output_subscribers.read().await;
+        if let Some(senders) = subs.get(&session_id) {
+            for tx in senders {
+                let _ = tx.send(output.to_string()).await;
+            }
         }
     }
 
@@ -190,9 +218,10 @@ impl SessionManager {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(&num) {
             // Send close command if there's a sender
-            if let Some(tx) = &session.command_tx {
-                let _ = tx.send(SessionCommand::Close).await;
-            }
+            if let Some(tx) = &session.command_tx
+                && let Err(e) = tx.send(SessionCommand::Close).await {
+                    tracing::warn!("Failed to send close command to session {}: {}", num, e);
+                }
             session.close();
             Some(session.clone())
         } else {
@@ -203,12 +232,13 @@ impl SessionManager {
     /// Kill all active sessions (for graceful shutdown).
     pub async fn kill_all(&self) {
         let mut sessions = self.sessions.write().await;
-        for (_, session) in sessions.iter_mut() {
+        for (id, session) in sessions.iter_mut() {
             if session.active {
                 // Send close command if there's a sender
-                if let Some(tx) = &session.command_tx {
-                    let _ = tx.send(SessionCommand::Close).await;
-                }
+                if let Some(tx) = &session.command_tx
+                    && let Err(e) = tx.send(SessionCommand::Close).await {
+                        tracing::warn!("Failed to send close command to session {}: {}", id, e);
+                    }
                 session.close();
             }
         }
@@ -217,13 +247,12 @@ impl SessionManager {
     /// Send a command to a session.
     pub async fn send_command(&self, session_num: u32, command: &str) -> anyhow::Result<()> {
         let sessions = self.sessions.read().await;
-        if let Some(session) = sessions.get(&session_num) {
-            if let Some(tx) = &session.command_tx {
+        if let Some(session) = sessions.get(&session_num)
+            && let Some(tx) = &session.command_tx {
                 tx.send(SessionCommand::Execute(command.to_string()))
                     .await?;
                 return Ok(());
             }
-        }
         Err(anyhow::anyhow!("Session {} not found or has no command channel", session_num))
     }
 

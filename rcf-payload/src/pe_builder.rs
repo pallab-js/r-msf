@@ -193,24 +193,16 @@ impl PeBuilder {
         // ─── Code Section ──────────────────────────────────────
         // Pad to file alignment
         let current_size = output.len() as u32;
-        let padding_needed = if dos_header_size < current_size {
-            0
-        } else {
-            dos_header_size - current_size
-        };
-        for _ in 0..padding_needed {
-            output.push(0);
-        }
+        let padding_needed = dos_header_size.saturating_sub(current_size);
+        output.resize(output.len() + padding_needed as usize, 0);
 
         // Write shellcode
         output.extend_from_slice(shellcode);
 
         // Pad to file alignment
         let current_code_size = (output.len() as u32) - dos_header_size;
-        let code_padding = code_file_size - current_code_size;
-        for _ in 0..code_padding {
-            output.push(0);
-        }
+        let code_padding = code_file_size.saturating_sub(current_code_size);
+        output.resize(output.len() + code_padding as usize, 0);
 
         output
     }

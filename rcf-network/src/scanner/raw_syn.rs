@@ -137,7 +137,8 @@ impl RawSynScanner {
         let mut send_handles = Vec::with_capacity(total);
 
         for port in port_list {
-            let permit = semaphore.acquire().await.unwrap();
+            let permit = semaphore.acquire().await
+                .map_err(|e| anyhow::anyhow!("Semaphore poisoned: {}", e))?;
             let src_ip = target_ip;
             let resp = Arc::clone(&responses);
             let timeout_dur = timeout;

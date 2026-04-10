@@ -222,7 +222,12 @@ fn generate_junk_block(rng: &mut impl Rng) -> Vec<u8> {
                 block.push(0xff);
                 block.push(0xc8 + reg); // dec
             }
-            _ => unreachable!(),
+            // Default case: no-op for unknown strategies
+            // This is safer than unreachable!() in case new variants are added
+            _ => {
+                // Insert a safe NOP (xchg eax, eax)
+                block.push(0x90);
+            }
         }
     }
 

@@ -1,0 +1,14 @@
+# RCF Quick Scan — Scan common ports on a target
+# Usage: rcf -r scripts/quick_scan.rc
+#   Or from console: resource scripts/quick_scan.rc
+
+# Set target (override with: setg RHOSTS <ip>)
+setg RHOSTS 127.0.0.1
+setg RPORT 80
+
+# Scan common ports
+use auxiliary/scanner/port/tcp_connect
+run
+
+# Show results
+show modules

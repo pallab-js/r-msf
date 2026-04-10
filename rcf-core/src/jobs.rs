@@ -31,8 +31,31 @@ impl std::fmt::Display for JobStatus {
     }
 }
 
+/// Serializable job info (without the JoinHandle).
+#[derive(Debug, Clone, Serialize)]
+pub struct JobInfo {
+    pub id: u32,
+    pub name: String,
+    pub description: String,
+    pub status: JobStatus,
+    pub started_at: i64,
+    pub completed_at: Option<i64>,
+}
+
+impl JobInfo {
+    fn from_job(job: &Job) -> Self {
+        Self {
+            id: job.id,
+            name: job.name.clone(),
+            description: job.description.clone(),
+            status: job.status.clone(),
+            started_at: job.started_at,
+            completed_at: job.completed_at,
+        }
+    }
+}
+
 /// A background job.
-#[derive(Debug, Serialize)]
 pub struct Job {
     pub id: u32,
     pub name: String,
@@ -40,22 +63,7 @@ pub struct Job {
     pub status: JobStatus,
     pub started_at: i64,
     pub completed_at: Option<i64>,
-    #[serde(skip)]
     pub handle: Option<JoinHandle<anyhow::Result<()>>>,
-}
-
-impl Clone for Job {
-    fn clone(&self) -> Self {
-        Self {
-            id: self.id,
-            name: self.name.clone(),
-            description: self.description.clone(),
-            status: self.status.clone(),
-            started_at: self.started_at,
-            completed_at: self.completed_at,
-            handle: None, // Don't clone the handle
-        }
-    }
 }
 
 impl Job {
@@ -132,28 +140,26 @@ impl JobManager {
     }
 
     /// Get job info by ID.
-    pub async fn get_job(&self, id: u32) -> Option<Job> {
-        // Note: handle is skipped in serialization
-        self.jobs.read().await.get(&id).cloned()
+    pub async fn get_job(&self, id: u32) -> Option<JobInfo> {
+        self.jobs.read().await.get(&id).map(JobInfo::from_job)
     }
 
     /// List all jobs.
-    pub async fn list_jobs(&self) -> Vec<Job> {
-        self.jobs.read().await.values().cloned().collect()
+    pub async fn list_jobs(&self) -> Vec<JobInfo> {
+        self.jobs.read().await.values().map(JobInfo::from_job).collect()
     }
 
     /// Stop a running job.
     pub async fn stop_job(&self, id: u32) -> bool {
         let mut jobs = self.jobs.write().await;
-        if let Some(job) = jobs.get_mut(&id) {
-            if job.status == JobStatus::Running {
+        if let Some(job) = jobs.get_mut(&id)
+            && job.status == JobStatus::Running {
                 job.stop();
                 if let Some(handle) = job.handle.take() {
                     handle.abort();
                 }
                 return true;
             }
-        }
         false
     }
 

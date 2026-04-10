@@ -27,7 +27,7 @@ impl PayloadExecutor {
     /// symlink attacks on predictable paths like `/tmp/rcf_payload_{pid}`.
     pub fn execute_elf(&self, elf_data: &[u8], timeout_secs: u64) -> anyhow::Result<ExecutionResult> {
         // Create a secure temporary file with unpredictable name
-        let mut temp_file = tempfile::Builder::new()
+        let temp_file = tempfile::Builder::new()
             .prefix("rcf_payload_")
             .suffix(".bin")
             .rand_bytes(16)
@@ -53,7 +53,9 @@ impl PayloadExecutor {
             .map_err(|e| anyhow::anyhow!("Failed to execute payload: {}", e))?;
 
         // Cleanup (tempfile also auto-deletes when dropped)
-        let _ = std::fs::remove_file(&exe_path);
+        if let Err(e) = std::fs::remove_file(&exe_path) {
+            tracing::warn!("Failed to remove payload temp file {}: {}", exe_path.display(), e);
+        }
 
         Ok(ExecutionResult {
             stdout: String::from_utf8_lossy(&output.stdout).to_string(),

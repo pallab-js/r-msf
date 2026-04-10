@@ -151,6 +151,12 @@ pub enum PortRange {
     Common,
 }
 
+/// Common ports list as a static slice (avoids allocation on every call).
+const COMMON_PORTS: &[u16] = &[
+    21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723,
+    3306, 3389, 5900, 8080, 8443,
+];
+
 impl PortRange {
     /// Convert to a list of ports.
     pub fn to_vec(&self) -> Vec<u16> {
@@ -161,12 +167,20 @@ impl PortRange {
             PortRange::WellKnown => (1..=1023).collect(),
             PortRange::Registered => (1..=49151).collect(),
             PortRange::All => (1..=65535).collect(),
-            PortRange::Common => {
-                vec![
-                    21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723,
-                    3306, 3389, 5900, 8080, 8443,
-                ]
-            }
+            PortRange::Common => COMMON_PORTS.to_vec(),
+        }
+    }
+
+    /// Returns an iterator over ports (zero-allocation for static ranges).
+    pub fn iter(&self) -> Box<dyn Iterator<Item = u16> + '_> {
+        match self {
+            PortRange::Range(start, end) => Box::new(*start..=*end),
+            PortRange::Single(p) => Box::new(std::iter::once(*p)),
+            PortRange::List(ports) => Box::new(ports.iter().copied()),
+            PortRange::WellKnown => Box::new(1..=1023),
+            PortRange::Registered => Box::new(1..=49151),
+            PortRange::All => Box::new(1..=65535),
+            PortRange::Common => Box::new(COMMON_PORTS.iter().copied()),
         }
     }
 
