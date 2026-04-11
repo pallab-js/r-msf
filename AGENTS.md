@@ -37,16 +37,12 @@ CI order: `fmt --check` → `check` → `test` → `build`
 
 ## CTF/Hackathon Features
 
-The framework includes CTF-specific modules optimized for competitive hacking:
-
 ```bash
-# Quick CTF start
+# Quick CTF start with resource script
 rcf -r scripts/ctf_start.rc --set RHOSTS=10.10.10.10
 
 # CTF timer
 rcf run -m auxiliary/ctf/timer -t 127.0.0.1 -- ACTION=start
-rcf run -m auxiliary/ctf/timer -t 127.0.0.1 -- ACTION=status
-rcf run -m auxiliary/ctf/timer -t 127.0.0.1 -- ACTION=stop
 
 # Quick port scan (top 30 CTF ports)
 rcf run -m auxiliary/scanner/ctf/quick_scan -t 10.10.10.10
@@ -54,20 +50,38 @@ rcf run -m auxiliary/scanner/ctf/quick_scan -t 10.10.10.10
 # Hash identification
 rcf run -m auxiliary/ctf/hashid -t 127.0.0.1 -- HASH=5d41402abc4b2a76b9719d911017c592
 
-# Reverse shell generator
-rcf run -m payload/ctf/reverse_shell -t 127.0.0.1 -- LHOST=10.10.14.2 -- LPORT=4444 -- SHELL=python
-
 # Directory fuzzing
 rcf run -m auxiliary/scanner/http/dirbust -t 10.10.10.10
 ```
 
-**CTF module categories** (in `rcf-labs/src/ctf_modules.rs`):
-- `auxiliary/ctf/timer` — Time tracking
-- `auxiliary/ctf/flag` — Flag extraction (flag{}, HTB{}, THM{})
-- `auxiliary/ctf/hashid` — Hash identification (50+ types)
-- `auxiliary/scanner/ctf/quick_scan` — Fast port scan
-- `payload/ctf/reverse_shell` — Multi-shell generation
-- `auxiliary/scanner/http/dirbust` — Web directory fuzzing
+## Anonymity Features (NEW)
+
+```bash
+# Set anonymity level
+rcf anon --level ghost       # 3-8s delay, max stealth
+rcf anon --level stealthy   # 1-3s delay, balanced
+rcf anon --level moderate  # 0.5-1.5s delay
+rcf anon --level standard  # default
+rcf anon --level aggressive  # 0-50ms delay, no anonymity
+
+# Add proxy chain (multiple = chain)
+rcf anon --proxy socks5://127.0.0.1:1080
+rcf anon --add-proxy http://proxy:8080 --add-proxy socks4://proxy:1081
+
+# Custom jitter timing
+rcf anon --jitter 1000:5000
+
+# Show config
+rcf anon --show
+
+# Export/import config
+rcf anon --export config.toml
+rcf anon --import config.toml
+```
+
+**Levels**: ghost → stealthy → moderate → standard → aggressive
+**Proxy types**: `socks5://`, `socks4://`, `http://`, `https://`
+**Features**: User-Agent rotation, WAF detection (8+ WAFs), silent mode, decoy traffic, report anonymizer
 
 ## Module Development
 
