@@ -8,6 +8,7 @@
 //! - Metasploitable
 
 pub mod advanced_exploits;
+pub mod ctf_modules;
 pub mod exploits;
 pub mod missing_vulns;
 pub mod more_protocol_exploits;
@@ -21,6 +22,7 @@ pub mod security;
 pub mod web_exploits;
 
 pub use advanced_exploits::*;
+pub use ctf_modules::*;
 pub use exploits::*;
 pub use missing_vulns::*;
 pub use more_protocol_exploits::*;

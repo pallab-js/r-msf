@@ -35,6 +35,40 @@ CI order: `fmt --check` → `check` → `test` → `build`
 - **Console**: `rcf-console` — interactive REPL with resource scripts (`.rc` files in `scripts/`)
 - **Database**: SQLite + Diesel in `rcf-db`; migrations are **embedded** (`embed_migrations!`)
 
+## CTF/Hackathon Features
+
+The framework includes CTF-specific modules optimized for competitive hacking:
+
+```bash
+# Quick CTF start
+rcf -r scripts/ctf_start.rc --set RHOSTS=10.10.10.10
+
+# CTF timer
+rcf run -m auxiliary/ctf/timer -t 127.0.0.1 -- ACTION=start
+rcf run -m auxiliary/ctf/timer -t 127.0.0.1 -- ACTION=status
+rcf run -m auxiliary/ctf/timer -t 127.0.0.1 -- ACTION=stop
+
+# Quick port scan (top 30 CTF ports)
+rcf run -m auxiliary/scanner/ctf/quick_scan -t 10.10.10.10
+
+# Hash identification
+rcf run -m auxiliary/ctf/hashid -t 127.0.0.1 -- HASH=5d41402abc4b2a76b9719d911017c592
+
+# Reverse shell generator
+rcf run -m payload/ctf/reverse_shell -t 127.0.0.1 -- LHOST=10.10.14.2 -- LPORT=4444 -- SHELL=python
+
+# Directory fuzzing
+rcf run -m auxiliary/scanner/http/dirbust -t 10.10.10.10
+```
+
+**CTF module categories** (in `rcf-labs/src/ctf_modules.rs`):
+- `auxiliary/ctf/timer` — Time tracking
+- `auxiliary/ctf/flag` — Flag extraction (flag{}, HTB{}, THM{})
+- `auxiliary/ctf/hashid` — Hash identification (50+ types)
+- `auxiliary/scanner/ctf/quick_scan` — Fast port scan
+- `payload/ctf/reverse_shell` — Multi-shell generation
+- `auxiliary/scanner/http/dirbust` — Web directory fuzzing
+
 ## Module Development
 
 Every module must implement `Module` trait:
@@ -48,6 +82,27 @@ fn run(&self, ctx: &mut Context, target: &Target)
 - Return `Pin<Box<dyn Future...>>`, **not** `async fn`
 - Move context variables into the async block before `Box::pin(async move { ... })`
 - All structs with `pub fn new() -> Self` should implement `Default` for consistency
+- **Critical**: `fn options()` must return `opts` at the end:
+  ```rust
+  fn options(&self) -> ModuleOptions {
+      let mut opts = ModuleOptions::new();
+      opts.add(ModuleOption::new("RHOSTS", true, "Target"));
+      opts  // ← MUST return opts, not ()
+  }
+  ```
+
+### Module Registration
+
+To add a new module:
+1. Create module struct in `rcf-labs/src/` (e.g., `ctf_modules.rs`)
+2. Export from `rcf-labs/src/lib.rs`: `pub mod ctf_modules; pub use ctf_modules::*;`
+3. Register in `rcf-modules/src/builtin.rs`:
+   ```rust
+   pub mod ctf_modules {
+       pub use rcf_labs::ctf_modules::{NewModule, AnotherModule};
+   }
+   registry.register(crate::builtin::ctf_modules::NewModule {});
+   ```
 
 ### TCP Socket I/O in Modules
 
@@ -138,6 +193,8 @@ let cmd = sanitize_command_input(&cmd_raw);
 - **NASM** (optional): required for real Linux x64 shellcode; fallback to safe placeholders if missing
 - **ssh2 crate**: For SSH brute force (`auxiliary/scanner/ssh/ssh_login`)
 - **ftp crate**: For FTP operations
+- **once_cell**: For `LazyLock` in module state
+- **regex**: For pattern matching in CTF modules
 
 ## Platform
 

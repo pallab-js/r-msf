@@ -72,6 +72,9 @@ byteorder = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Anonymity & patterns
+regex = "1"
+
 # Profile for minimal binary size
 [profile.release]
 opt-level = "z"

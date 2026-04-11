@@ -1,0 +1,14 @@
+# CTF Web Challenge — Quick enumeration
+# Usage: rcf -r scripts/ctf_web.rc -set RHOSTS=10.10.10.10
+
+setg RHOSTS 10.10.10.10
+setg RPORT 80
+
+# Directory fuzzing
+use auxiliary/scanner/http/dirbust
+run
+
+# Check for flags in common locations
+use auxiliary/ctf/flag
+setg FILE /var/www/html/index.html
+run

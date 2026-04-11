@@ -4,7 +4,9 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-use rcf_core::Context;
+use rcf_core::{
+    AnonymityConfig, AnonymityLevel, AnonymityManager, Context, ProxyProtocol, ProxyServer,
+};
 use rcf_modules::builtin::register_builtin_modules;
 use rcf_modules::{ModuleManager, ModuleRegistry};
 
@@ -193,6 +195,53 @@ enum Commands {
         /// Aggressive mode (full port scan + all vuln checks)
         #[arg(short, long)]
         aggressive: bool,
+    },
+
+    /// Anonymity configuration and operations
+    Anon {
+        /// Configure anonymity level
+        #[arg(short, long)]
+        level: Option<String>,
+
+        /// Set proxy server (protocol://host:port)
+        #[arg(long)]
+        proxy: Option<String>,
+
+        /// Add proxy to chain (multiple --proxy flags create chain)
+        #[arg(long)]
+        add_proxy: Vec<String>,
+
+        /// Set jitter delay range (min-ms:max-ms)
+        #[arg(long)]
+        jitter: Option<String>,
+
+        /// Enable silent mode (no output)
+        #[arg(long)]
+        silent: bool,
+
+        /// Enable User-Agent rotation
+        #[arg(long)]
+        rotate_ua: Option<bool>,
+
+        /// Add decoy target (host:port)
+        #[arg(long)]
+        decoy: Vec<String>,
+
+        /// Enable WAF detection
+        #[arg(long)]
+        detect_waf: Option<bool>,
+
+        /// Show current anonymity config
+        #[arg(long)]
+        show: bool,
+
+        /// Export config to file
+        #[arg(long)]
+        export: Option<String>,
+
+        /// Import config from file
+        #[arg(long)]
+        import: Option<String>,
     },
 }
 
@@ -444,6 +493,36 @@ async fn main() -> anyhow::Result<()> {
             aggressive,
         }) => {
             run_auto(&target, output.as_deref(), aggressive).await?;
+            return Ok(());
+        }
+
+        Some(Commands::Anon {
+            level,
+            proxy,
+            add_proxy,
+            jitter,
+            silent,
+            rotate_ua,
+            decoy,
+            detect_waf,
+            show,
+            export,
+            import,
+        }) => {
+            run_anonymity(
+                level.as_deref(),
+                proxy.as_deref(),
+                &add_proxy,
+                jitter.as_deref(),
+                silent,
+                rotate_ua,
+                &decoy,
+                detect_waf,
+                show,
+                export.as_deref(),
+                import.as_deref(),
+            )
+            .await?;
             return Ok(());
         }
 
@@ -1433,4 +1512,199 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
     );
 
     Ok(())
+}
+
+static ANONYMITY_MANAGER: std::sync::LazyLock<AnonymityManager> =
+    std::sync::LazyLock::new(|| AnonymityManager::new(AnonymityConfig::default()));
+
+async fn run_anonymity(
+    level: Option<&str>,
+    proxy: Option<&str>,
+    add_proxy: &[String],
+    jitter: Option<&str>,
+    silent: bool,
+    rotate_ua: Option<bool>,
+    decoy: &[String],
+    detect_waf: Option<bool>,
+    show: bool,
+    export: Option<&str>,
+    import: Option<&str>,
+) -> anyhow::Result<()> {
+    use colored::Colorize;
+    use rcf_core::{DecoyConfig, DecoyTarget};
+
+    if show {
+        let config = ANONYMITY_MANAGER.get_config().await;
+        println!("{}", "[*] Current Anonymity Configuration:".bold().cyan());
+        println!(
+            "  Jitter: {}ms - {}ms",
+            config.jitter_min_ms, config.jitter_max_ms
+        );
+        println!("  Rotate User-Agent: {}", config.rotate_user_agent);
+        println!("  Silent Mode: {}", config.silent_mode);
+        println!("  Randomize Headers: {}", config.randomize_headers);
+        println!("  WAF Detection: {}", config.waf_detection);
+        println!("  Strict TLS: {}", config.strict_tls);
+        println!("  Timeout: {}s", config.timeout_seconds);
+        println!(
+            "  Proxy Chain: {}",
+            if config.proxy_chain.is_empty() {
+                "none".to_string()
+            } else {
+                config
+                    .proxy_chain
+                    .iter()
+                    .map(|p| p.to_url())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        );
+
+        if let Some(ref decoy) = config.add_decoy_traffic {
+            println!("  Decoy Traffic: enabled ({})", decoy.decoy_ratio);
+        }
+
+        return Ok(());
+    }
+
+    if let Some(import_file) = import {
+        let toml_content = std::fs::read_to_string(import_file)?;
+        let config = rcf_core::config_from_toml(&toml_content)?;
+        ANONYMITY_MANAGER.update_config(config).await;
+        println!(
+            "{}",
+            format!("[+] Loaded config from: {}", import_file)
+                .bold()
+                .green()
+        );
+        return Ok(());
+    }
+
+    let mut config = if let Some(lvl) = level {
+        match lvl.to_lowercase().as_str() {
+            "ghost" => AnonymityConfig::from_level(AnonymityLevel::Ghost),
+            "stealthy" => AnonymityConfig::from_level(AnonymityLevel::Stealthy),
+            "moderate" => AnonymityConfig::from_level(AnonymityLevel::Moderate),
+            "standard" => AnonymityConfig::from_level(AnonymityLevel::Standard),
+            "aggressive" => AnonymityConfig::from_level(AnonymityLevel::Aggressive),
+            _ => {
+                eprintln!(
+                    "{}",
+                    "Invalid level. Use: ghost, stealthy, moderate, standard, aggressive".red()
+                );
+                return Ok(());
+            }
+        }
+    } else {
+        ANONYMITY_MANAGER.get_config().await.clone()
+    };
+
+    config.silent_mode |= silent;
+
+    if let Some(ru) = rotate_ua {
+        config.rotate_user_agent = ru;
+    }
+
+    if let Some(dw) = detect_waf {
+        config.waf_detection = dw;
+    }
+
+    if let Some(p) = proxy {
+        if let Some(ps) = parse_proxy(p) {
+            config.proxy_chain.push(ps);
+        }
+    }
+
+    for p in add_proxy {
+        if let Some(ps) = parse_proxy(p) {
+            config.proxy_chain.push(ps);
+        }
+    }
+
+    if let Some(j) = jitter {
+        let parts: Vec<&str> = j.split(':').collect();
+        if parts.len() == 2 {
+            config.jitter_min_ms = parts[0].parse().unwrap_or(100);
+            config.jitter_max_ms = parts[1].parse().unwrap_or(500);
+        }
+    }
+
+    if !decoy.is_empty() {
+        let mut targets = Vec::new();
+        for d in decoy {
+            let parts: Vec<&str> = d.split(':').collect();
+            if parts.len() >= 2 {
+                let host = parts[0].to_string();
+                let port: u16 = parts[1].parse().unwrap_or(80);
+                targets.push(DecoyTarget {
+                    host,
+                    port,
+                    method: rcf_core::DecoyMethod::Connect,
+                });
+            }
+        }
+        config.add_decoy_traffic = Some(DecoyConfig {
+            enabled: true,
+            decoy_ratio: 0.1,
+            decoy_targets: targets,
+        });
+    }
+
+    config.validate()?;
+
+    if silent {
+        ANONYMITY_MANAGER.set_silent(true).await;
+    }
+
+    ANONYMITY_MANAGER.update_config(config.clone()).await;
+
+    println!("{}", "[+] Anonymity configuration updated".bold().green());
+    println!();
+    println!("  Level: {}", level.unwrap_or("custom"));
+    println!("  Silent: {}", config.silent_mode);
+    println!(
+        "  Jitter: {}ms - {}ms",
+        config.jitter_min_ms, config.jitter_max_ms
+    );
+    println!("  Rotate UA: {}", config.rotate_user_agent);
+    if !config.proxy_chain.is_empty() {
+        println!("  Proxies: {}", config.proxy_chain.len());
+    }
+
+    if let Some(export_file) = export {
+        let toml = rcf_core::config_to_toml(&config)?;
+        std::fs::write(export_file, &toml)?;
+        println!(
+            "{}",
+            format!("[+] Exported to: {}", export_file).bold().green()
+        );
+    }
+
+    Ok(())
+}
+
+fn parse_proxy(s: &str) -> Option<ProxyServer> {
+    let lower = s.to_lowercase();
+    let (protocol, rest) = if lower.starts_with("socks5://") {
+        (ProxyProtocol::Socks5, &s[8..])
+    } else if lower.starts_with("socks4://") {
+        (ProxyProtocol::Socks4, &s[8..])
+    } else if lower.starts_with("http://") {
+        (ProxyProtocol::Http, &s[7..])
+    } else if lower.starts_with("https://") {
+        (ProxyProtocol::Http, &s[8..])
+    } else if lower.contains("://") {
+        (ProxyProtocol::Http, s.split("://").nth(1)?)
+    } else {
+        (ProxyProtocol::Http, s)
+    };
+
+    let parts: Vec<&str> = rest.split(':').collect();
+    if parts.len() >= 2 {
+        let host = parts[0].to_string();
+        let port: u16 = parts[1].parse().ok()?;
+        Some(ProxyServer::new(protocol, host, port))
+    } else {
+        None
+    }
 }
