@@ -2,7 +2,7 @@
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use tracing::{info, warn};
 
 use crate::models::*;
@@ -192,8 +192,8 @@ impl RcfDatabase {
         } else {
             // Use Argon2 for secure password hashing (memory-hard, resistant to GPU attacks)
             use argon2::{
-                password_hash::{PasswordHasher, SaltString},
                 Argon2,
+                password_hash::{PasswordHasher, SaltString},
             };
 
             // Generate a cryptographically secure random salt using getrandom

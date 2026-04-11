@@ -45,12 +45,7 @@ impl TcpSynScanner {
                         }
                     };
                     return raw_scanner
-                        .scan(
-                            target_ip,
-                            &config.ports,
-                            config.timeout,
-                            config.concurrency,
-                        )
+                        .scan(target_ip, &config.ports, config.timeout, config.concurrency)
                         .await;
                 }
             }

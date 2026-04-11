@@ -120,24 +120,44 @@ fn build_xor_decoder(key: u8, payload_len: usize) -> Vec<u8> {
 
     vec![
         // call next
-        0xe8, 0x00, 0x00, 0x00, 0x00,
+        0xe8,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
         // pop rcx
         0x59,
         // mov r8b, <key>
-        0x41, 0xb0, key,
+        0x41,
+        0xb0,
+        key,
         // mov r9d, <len>
-        0x41, 0xb9, len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3],
+        0x41,
+        0xb9,
+        len_bytes[0],
+        len_bytes[1],
+        len_bytes[2],
+        len_bytes[3],
         // decode_loop:
         // xor byte [rcx], r8b
-        0x41, 0x80, 0x31, 0x00,
+        0x41,
+        0x80,
+        0x31,
+        0x00,
         // inc rcx
-        0x48, 0xff, 0xc1,
+        0x48,
+        0xff,
+        0xc1,
         // dec r9d
-        0x41, 0xff, 0xc9,
+        0x41,
+        0xff,
+        0xc9,
         // jnz decode_loop
-        0x75, 0xf6,
+        0x75,
+        0xf6,
         // jmp rcx
-        0xff, 0xe1,
+        0xff,
+        0xe1,
     ]
 }
 
@@ -147,33 +167,65 @@ fn build_xor_dynamic_decoder(key: &[u8; 4], payload_len: usize) -> Vec<u8> {
 
     vec![
         // call next
-        0xe8, 0x00, 0x00, 0x00, 0x00,
+        0xe8,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
         // pop rcx
         0x59,
         // xor r10d, r10d (counter)
-        0x4d, 0x31, 0xd2,
+        0x4d,
+        0x31,
+        0xd2,
         // mov r9d, <len>
-        0x41, 0xb9, len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3],
+        0x41,
+        0xb9,
+        len_bytes[0],
+        len_bytes[1],
+        len_bytes[2],
+        len_bytes[3],
         // Store key in r8d
-        0x41, 0xb8, key[0], key[1], key[2], key[3],
+        0x41,
+        0xb8,
+        key[0],
+        key[1],
+        key[2],
+        key[3],
         // decode_loop:
         // mov r11b, r8b
-        0x4c, 0x8a, 0xd8,
+        0x4c,
+        0x8a,
+        0xd8,
         // shift key based on counter
         // xor byte [rcx], r11b
-        0x41, 0x80, 0x31, 0x00,
+        0x41,
+        0x80,
+        0x31,
+        0x00,
         // inc rcx
-        0x48, 0xff, 0xc1,
+        0x48,
+        0xff,
+        0xc1,
         // inc r10d
-        0x41, 0xff, 0xc2,
+        0x41,
+        0xff,
+        0xc2,
         // rol r8d, 8 (rotate key)
-        0x41, 0xc1, 0xc0, 0x08,
+        0x41,
+        0xc1,
+        0xc0,
+        0x08,
         // dec r9d
-        0x41, 0xff, 0xc9,
+        0x41,
+        0xff,
+        0xc9,
         // jnz decode_loop
-        0x75, 0xea,
+        0x75,
+        0xea,
         // jmp rcx
-        0xff, 0xe1,
+        0xff,
+        0xe1,
     ]
 }
 
@@ -185,10 +237,20 @@ pub fn nop_sled_encode(shellcode: &[u8], size: usize) -> Vec<u8> {
     for _ in 0..size {
         // Mix of NOP (0x90) and NOP-equivalent instructions
         match rng.random_range(0..4) {
-            0 => result.push(0x90),             // nop
-            1 => { result.push(0x48); result.push(0x90); } // rex.nop
-            2 => { result.push(0x66); result.push(0x90); } // 16-bit nop
-            _ => { result.push(0x0f); result.push(0x1f); result.push(0x00); } // nop dword [rax]
+            0 => result.push(0x90), // nop
+            1 => {
+                result.push(0x48);
+                result.push(0x90);
+            } // rex.nop
+            2 => {
+                result.push(0x66);
+                result.push(0x90);
+            } // 16-bit nop
+            _ => {
+                result.push(0x0f);
+                result.push(0x1f);
+                result.push(0x00);
+            } // nop dword [rax]
         }
     }
 
@@ -259,6 +321,9 @@ mod tests {
         let result = nop_sled_encode(&original, 16);
         // NOP sled should add at least 16 bytes (some NOP variants are 2-3 bytes each)
         assert!(result.len() >= 16 + original.len());
-        assert_eq!(&result[result.len() - original.len()..], original.as_slice());
+        assert_eq!(
+            &result[result.len() - original.len()..],
+            original.as_slice()
+        );
     }
 }

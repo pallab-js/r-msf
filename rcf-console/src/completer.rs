@@ -1,11 +1,11 @@
 //! Tab completion for the RCF console.
 
+use rustyline::Context;
+use rustyline::Helper;
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::highlight::Highlighter;
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
-use rustyline::Helper;
-use rustyline::Context;
 
 use rcf_modules::ModuleRegistry;
 
@@ -29,14 +29,14 @@ impl RcfCompleter {
         Self {
             filename_completer: FilenameCompleter::new(),
             commands: vec![
-                "help", "exit", "quit", "version", "show", "search", "info", "use", "back",
-                "set", "unset", "options", "run", "exploit", "check", "targets", "sessions",
-                "jobs", "reload", "save", "load",
+                "help", "exit", "quit", "version", "show", "search", "info", "use", "back", "set",
+                "unset", "options", "run", "exploit", "check", "targets", "sessions", "jobs",
+                "reload", "save", "load",
             ],
             module_names,
             option_keys: vec![
-                "RHOSTS", "RPORT", "LHOST", "LPORT", "TARGET", "PAYLOAD", "THREADS",
-                "TIMEOUT", "VERBOSE", "SSL", "PROXIES",
+                "RHOSTS", "RPORT", "LHOST", "LPORT", "TARGET", "PAYLOAD", "THREADS", "TIMEOUT",
+                "VERBOSE", "SSL", "PROXIES",
             ],
         }
     }

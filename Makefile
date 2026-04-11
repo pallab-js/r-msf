@@ -1,4 +1,4 @@
-# Rust Cybersecurity Framework — Build System
+# Rust Cybersecurity Framework — Build System (Linux x86_64 only)
 # Usage: make <target>
 
 SHELL := /bin/bash
@@ -9,7 +9,6 @@ VERSION := $(shell grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
 DIST_DIR := dist
 
 .PHONY: all build release test check clean lint bloat help
-.PHONY: linux-x64 linux-arm64 macos-x64 macos-arm64 windows-x64
 .PHONY: install dist
 
 # ─── Default ────────────────────────────────────────────────────────
@@ -19,7 +18,7 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# ─── Development ────────────────────────────────────────────────────
+# ─── Build ───────────────────────────────────────────────────────────
 build: ## Build debug binary
 	$(CARGO) build -p $(TARGET)
 
@@ -41,38 +40,18 @@ fmt: ## Format code
 format-check: ## Check formatting
 	$(CARGO) fmt -- --check
 
-# ─── Cross-Compilation ──────────────────────────────────────────────
-linux-x64: ## Build for Linux x86_64
-	rustup target add x86_64-unknown-linux-gnu
-	$(CARGO) build --release -p $(TARGET) --target x86_64-unknown-linux-gnu
-
-linux-arm64: ## Build for Linux ARM64
-	rustup target add aarch64-unknown-linux-gnu
-	$(CARGO) build --release -p $(TARGET) --target aarch64-unknown-linux-gnu
-
-macos-x64: ## Build for macOS Intel
-	rustup target add x86_64-apple-darwin
-	$(CARGO) build --release -p $(TARGET) --target x86_64-apple-darwin
-
-macos-arm64: ## Build for macOS Apple Silicon (default)
-	$(CARGO) build --release -p $(TARGET)
-
-windows-x64: ## Build for Windows x64 (requires MinGW)
-	rustup target add x86_64-pc-windows-gnu
-	$(CARGO) build --release -p $(TARGET) --target x86_64-pc-windows-gnu
-
 # ─── Distribution ───────────────────────────────────────────────────
-dist: release ## Build and package all targets
+dist: release ## Build and package binary
 	@mkdir -p $(DIST_DIR)
-	@cp target/release/$(BINARY) $(DIST_DIR)/$(BINARY)-v$(VERSION)-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
-	@echo "Built: $(DIST_DIR)/$(BINARY)-v$(VERSION)-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)"
+	@cp target/release/$(BINARY) $(DIST_DIR)/$(BINARY)-v$(VERSION)-linux-x86_64
+	@echo "Built: $(DIST_DIR)/$(BINARY)-v$(VERSION)-linux-x86_64"
 	@ls -lh $(DIST_DIR)/
 
 install: release ## Install binary to /usr/local/bin
 	@cp target/release/$(BINARY) /usr/local/bin/$(BINARY)
 	@echo "Installed $(BINARY) to /usr/local/bin/"
 
-# ─── Analysis ───────────────────────────────────────────────────────
+# ─── Analysis ────────────────────────────────────────────────────────
 bloat: ## Analyze binary size with cargo-bloat
 	$(CARGO) bloat --release -p $(TARGET) --crates | head -30
 

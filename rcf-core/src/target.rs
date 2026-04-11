@@ -100,9 +100,10 @@ pub fn parse_targets(input: &str, default_port: u16) -> Result<Vec<Target>> {
         // Handle IP ranges like 192.168.1.1-10
         if let Some((base, range)) = part.rsplit_once('-')
             && let Ok(start) = range.parse::<u8>()
-            && let Some((prefix, _)) = base.rsplit_once('.')
+            && let Some((prefix, last_octet)) = base.rsplit_once('.')
+            && let Ok(end) = last_octet.parse::<u8>()
         {
-            for i in start..=254u8 {
+            for i in start..=end.min(254) {
                 let host = format!("{}.{}", prefix, i);
                 targets.push(Target::new(&host, default_port));
             }

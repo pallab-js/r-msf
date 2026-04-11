@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error, Level};
+use tracing::{Level, error, info, warn};
 
 /// Audit event severity levels.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -70,22 +70,22 @@ impl AuditEntry {
             metadata: None,
         }
     }
-    
+
     pub fn with_target(mut self, target: impl Into<String>) -> Self {
         self.target = Some(target.into());
         self
     }
-    
+
     pub fn with_user(mut self, user: impl Into<String>) -> Self {
         self.user = Some(user.into());
         self
     }
-    
+
     pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = Some(metadata);
         self
     }
-    
+
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_else(|_| String::from("{}"))
     }
@@ -112,19 +112,19 @@ impl AuditLogger {
             file_path: None,
         }
     }
-    
+
     /// Set the audit log file path.
     pub fn with_file(mut self, path: impl Into<String>) -> Self {
         self.file_path = Some(path.into());
         self
     }
-    
+
     /// Set the maximum number of entries to keep in memory.
     pub fn with_max_entries(mut self, max: usize) -> Self {
         self.max_entries = max;
         self
     }
-    
+
     /// Log an audit entry.
     pub async fn log(&self, entry: AuditEntry) {
         // Log to tracing with security level
@@ -134,10 +134,10 @@ impl AuditLogger {
             AuditLevel::Error => Level::ERROR,
             AuditLevel::Critical => Level::ERROR,
         };
-        
+
         let target_str = entry.target.as_deref().unwrap_or("-");
         let user_str = entry.user.as_deref().unwrap_or("-");
-        
+
         // Use tracing to log (can be captured by tracing-subscriber)
         match log_level {
             Level::INFO => info!(
@@ -165,54 +165,58 @@ impl AuditLogger {
                 "{}", entry.message
             ),
         }
-        
+
         // Store in memory
         let mut entries = self.entries.lock().await;
         entries.push(entry);
-        
+
         // Trim if necessary
         if entries.len() > self.max_entries {
             entries.drain(0..1000);
         }
-        
+
         // Write to file if configured
         if let Some(ref path) = self.file_path
             && let Ok(mut file) = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(path)
-            {
-                use std::io::Write;
-                if let Some(entry) = entries.last() {
-                    let line = format!("{}\n", entry.to_json());
-                    let _ = file.write_all(line.as_bytes());
-                }
+        {
+            use std::io::Write;
+            if let Some(entry) = entries.last() {
+                let line = format!("{}\n", entry.to_json());
+                let _ = file.write_all(line.as_bytes());
             }
+        }
     }
-    
+
     /// Get all audit entries.
     pub async fn get_entries(&self) -> Vec<AuditEntry> {
         self.entries.lock().await.clone()
     }
-    
+
     /// Get entries by category.
     pub async fn get_by_category(&self, category: &AuditCategory) -> Vec<AuditEntry> {
-        self.entries.lock().await
+        self.entries
+            .lock()
+            .await
             .iter()
             .filter(|e| &e.category == category)
             .cloned()
             .collect()
     }
-    
+
     /// Get entries by level.
     pub async fn get_by_level(&self, level: &AuditLevel) -> Vec<AuditEntry> {
-        self.entries.lock().await
+        self.entries
+            .lock()
+            .await
             .iter()
             .filter(|e| &e.level == level)
             .cloned()
             .collect()
     }
-    
+
     /// Clear all entries.
     pub async fn clear(&self) {
         self.entries.lock().await.clear();
@@ -228,17 +232,20 @@ pub async fn audit_module_execution(
     target: &str,
     success: bool,
 ) {
-    let level = if success { AuditLevel::Info } else { AuditLevel::Warning };
+    let level = if success {
+        AuditLevel::Info
+    } else {
+        AuditLevel::Warning
+    };
     let message = format!(
         "Module {} executed on {}: {}",
         module_name,
         target,
         if success { "SUCCESS" } else { "FAILED" }
     );
-    
-    let entry = AuditEntry::new(level, AuditCategory::ModuleExecution, message)
-        .with_target(target);
-    
+
+    let entry = AuditEntry::new(level, AuditCategory::ModuleExecution, message).with_target(target);
+
     logger.log(entry).await;
 }
 
@@ -252,14 +259,17 @@ pub async fn audit_credential_discovered(
     let entry = AuditEntry::new(
         AuditLevel::Warning,
         AuditCategory::CredentialDiscovery,
-        format!("Credential discovered: {}@{} (service: {})", username, target, service),
+        format!(
+            "Credential discovered: {}@{} (service: {})",
+            username, target, service
+        ),
     )
     .with_target(target)
     .with_metadata(serde_json::json!({
         "username": username,
         "service": service
     }));
-    
+
     logger.log(entry).await;
 }
 
@@ -277,11 +287,14 @@ pub async fn audit_vulnerability_found(
         "medium" => AuditLevel::Warning,
         _ => AuditLevel::Info,
     };
-    
+
     let entry = AuditEntry::new(
         level,
         AuditCategory::VulnerabilityFound,
-        format!("Vulnerability found on {}: {} (severity: {}, cve: {:?})", target, vuln_name, severity, cve),
+        format!(
+            "Vulnerability found on {}: {} (severity: {}, cve: {:?})",
+            target, vuln_name, severity, cve
+        ),
     )
     .with_target(target)
     .with_metadata(serde_json::json!({
@@ -289,16 +302,12 @@ pub async fn audit_vulnerability_found(
         "severity": severity,
         "cve": cve
     }));
-    
+
     logger.log(entry).await;
 }
 
 /// Log C2 session events.
-pub async fn audit_c2_session(
-    logger: &AuditLogger,
-    peer_addr: &str,
-    event: &str,
-) {
+pub async fn audit_c2_session(logger: &AuditLogger, peer_addr: &str, event: &str) {
     let level = match event {
         "connected" => AuditLevel::Info,
         "disconnected" => AuditLevel::Info,
@@ -306,14 +315,14 @@ pub async fn audit_c2_session(
         "auth_failed" => AuditLevel::Error,
         _ => AuditLevel::Info,
     };
-    
+
     let entry = AuditEntry::new(
         level,
         AuditCategory::C2Session,
         format!("C2 session event: {} from {}", event, peer_addr),
     )
     .with_target(peer_addr);
-    
+
     logger.log(entry).await;
 }
 
@@ -334,10 +343,10 @@ pub async fn audit_security_violation(
         "details": details,
         "source": source
     }));
-    
+
     if let Some(s) = source {
         entry = entry.with_target(s);
     }
-    
+
     logger.log(entry).await;
 }

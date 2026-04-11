@@ -2,5 +2,5 @@
 //!
 //! Phase 2 implementation — currently a stub.
 
-pub mod scanner;
 pub mod protocols;
+pub mod scanner;

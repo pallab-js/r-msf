@@ -3,9 +3,9 @@
 //! Provides a trait-based internal module registry with optional
 //! dynamic loading support via libloading.
 
-pub mod registry;
-pub mod manager;
 pub mod builtin;
+pub mod manager;
+pub mod registry;
 
-pub use registry::ModuleRegistry;
 pub use manager::ModuleManager;
+pub use registry::ModuleRegistry;

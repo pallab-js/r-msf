@@ -6,14 +6,14 @@ use std::sync::Arc;
 
 use colored::Colorize;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Config};
+use rustyline::{Config, DefaultEditor};
 use tracing::info;
 
 use rcf_core::{Context, JobManager, Result, Target};
 use rcf_modules::ModuleManager;
 
 use crate::commands::{Command, parse_command};
-use crate::resource::{ResourceScript, ResourceExecutor};
+use crate::resource::{ResourceExecutor, ResourceScript};
 
 /// The main REPL console.
 pub struct RcfConsole {
@@ -54,9 +54,7 @@ impl RcfConsole {
             let c2 = rcf_c2::C2ControlClient::new("127.0.0.1", 8444);
             let c2_clone = c2.clone();
             let result = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    c2_clone.list_sessions().await
-                })
+                tokio::runtime::Handle::current().block_on(async { c2_clone.list_sessions().await })
             });
             match result {
                 Ok(_) => {
@@ -64,7 +62,9 @@ impl RcfConsole {
                     Some(c2)
                 }
                 Err(_) => {
-                    tracing::debug!("No C2 control server found (sessions/interact will be limited)");
+                    tracing::debug!(
+                        "No C2 control server found (sessions/interact will be limited)"
+                    );
                     None
                 }
             }
@@ -173,18 +173,34 @@ impl RcfConsole {
 
     // ─── Command implementations ───────────────────────────────────────
 
+    #[allow(clippy::print_literal)]
     fn cmd_help(&self) {
         println!("\n{}", "Core Commands".bold().green());
         println!("  {:<15} {}", "Command".bold(), "Description".bold());
         println!("  {:<15} {}", "-------".bold(), "-----------".bold());
         println!("  {:<15} {}", "help", "Show this help");
         println!("  {:<15} {}", "version", "Show RCF version");
-        println!("  {:<15} {}", "show [category]", "List modules (all, exploits, auxiliary, payloads, encoders, posts)");
-        println!("  {:<15} {}", "search <keyword>", "Search modules by name/description");
-        println!("  {:<15} {}", "info <module>", "Show detailed module information");
-        println!("  {:<15} {}", "use <module>", "Select a module to configure");
+        println!(
+            "  {:<15} {}",
+            "show [category]", "List modules (all, exploits, auxiliary, payloads, encoders, posts)"
+        );
+        println!(
+            "  {:<15} {}",
+            "search <keyword>", "Search modules by name/description"
+        );
+        println!(
+            "  {:<15} {}",
+            "info <module>", "Show detailed module information"
+        );
+        println!(
+            "  {:<15} {}",
+            "use <module>", "Select a module to configure"
+        );
         println!("  {:<15} {}", "back", "Deselect current module");
-        println!("  {:<15} {}", "set <key> <value>", "Set an option (global or module-specific)");
+        println!(
+            "  {:<15} {}",
+            "set <key> <value>", "Set an option (global or module-specific)"
+        );
         println!("  {:<15} {}", "unset <key>", "Unset an option");
         println!("  {:<15} {}", "options", "Show current module options");
         println!("  {:<15} {}", "run", "Execute the current module");
@@ -198,15 +214,24 @@ impl RcfConsole {
         println!("  {:<15} {}", "reload", "Reload all modules");
         println!("  {:<15} {}", "save [path]", "Save context to file");
         println!("  {:<15} {}", "load [path]", "Load context from file");
-        println!("  {:<15} {}", "setg <key> <val>", "Set global variable (for resource scripts)");
+        println!(
+            "  {:<15} {}",
+            "setg <key> <val>", "Set global variable (for resource scripts)"
+        );
         println!("  {:<15} {}", "unsetg <key>", "Unset global variable");
-        println!("  {:<15} {}", "resource <file>", "Execute a resource script (.rc file)");
+        println!(
+            "  {:<15} {}",
+            "resource <file>", "Execute a resource script (.rc file)"
+        );
         println!("  {:<15} {}", "exit / quit", "Exit the console");
         println!();
         println!("{} Resource Scripts:", "[*]".cyan());
         println!("  {} Use -r flag: rcf -r scripts/quick_scan.rc", "   ");
         println!("  {} Variables: ${{RHOSTS}}, ${{LHOST}}, etc.", "   ");
-        println!("  {} Examples: scripts/quick_scan.rc, scripts/web_assessment.rc\n", "   ");
+        println!(
+            "  {} Examples: scripts/quick_scan.rc, scripts/web_assessment.rc\n",
+            "   "
+        );
     }
 
     fn cmd_version(&self) {
@@ -237,7 +262,10 @@ impl RcfConsole {
                 self.cmd_options();
             }
             Some(other) => {
-                println!("Unknown show target: '{}'. Try: modules, exploits, auxiliary, payloads, encoders, posts, options", other);
+                println!(
+                    "Unknown show target: '{}'. Try: modules, exploits, auxiliary, payloads, encoders, posts, options",
+                    other
+                );
             }
         }
     }
@@ -260,7 +288,12 @@ impl RcfConsole {
                 println!("\n{}", m.options().format_table());
             }
             None => {
-                println!("{} Module '{}' not found. Try 'search {}'", "[-]".red(), module, module);
+                println!(
+                    "{} Module '{}' not found. Try 'search {}'",
+                    "[-]".red(),
+                    module,
+                    module
+                );
             }
         }
     }
@@ -275,11 +308,14 @@ impl RcfConsole {
         self.context.set(key, value);
 
         // If a module is selected, also set on module options
-        if let Some(ref module_name) = self.context.current_module {
-            if let Some(_module) = self.manager.registry().get(module_name) {
-                // Just note it — actual module option binding happens at run time
-                info!("Set {} = {} (global + module context: {})", key, value, module_name);
-            }
+        if let Some(ref module_name) = self.context.current_module
+            && let Some(_module) = self.manager.registry().get(module_name)
+        {
+            // Just note it — actual module option binding happens at run time
+            info!(
+                "Set {} = {} (global + module context: {})",
+                key, value, module_name
+            );
         }
 
         println!("{} {} => {}", "[+]".green(), key.bold(), value.bold());
@@ -293,7 +329,11 @@ impl RcfConsole {
     fn cmd_options(&self) {
         if let Some(ref module_name) = self.context.current_module {
             if let Some(module) = self.manager.registry().get(module_name) {
-                println!("\n{} Options for '{}'\n", "Module".bold().green(), module_name);
+                println!(
+                    "\n{} Options for '{}'\n",
+                    "Module".bold().green(),
+                    module_name
+                );
                 println!("{}", module.options().format_table());
             }
         } else {
@@ -337,7 +377,10 @@ impl RcfConsole {
                 println!("{} Module '{}' not found", "[-]".red(), module_name);
             }
         } else {
-            println!("{} No module selected. Use 'use <module>' first.", "[-]".red());
+            println!(
+                "{} No module selected. Use 'use <module>' first.",
+                "[-]".red()
+            );
         }
         Ok(())
     }
@@ -374,7 +417,11 @@ impl RcfConsole {
         if let Some(ref module_name) = self.context.current_module {
             if let Some(module) = self.manager.registry().get(module_name) {
                 let info = module.info();
-                println!("\n{} Compatible targets for '{}'\n", "Targets".bold().green(), info.name);
+                println!(
+                    "\n{} Compatible targets for '{}'\n",
+                    "Targets".bold().green(),
+                    info.name
+                );
                 println!("  Configure using: set RHOSTS <ip>  set RPORT <port>");
             }
         } else {
@@ -393,10 +440,20 @@ impl RcfConsole {
                         }
                         Ok(sessions) => {
                             println!("\n{}", "Active C2 Sessions".bold().green());
-                            println!("  {:<6} {:<20} {:<15} {}",
-                                "ID".bold(), "Info".bold(), "Created".bold(), "Last Seen".bold());
-                            println!("  {:<6} {:<20} {:<15} {}",
-                                "--".bold(), "----".bold(), "-------".bold(), "---------".bold());
+                            println!(
+                                "  {:<6} {:<20} {:<15} {}",
+                                "ID".bold(),
+                                "Info".bold(),
+                                "Created".bold(),
+                                "Last Seen".bold()
+                            );
+                            println!(
+                                "  {:<6} {:<20} {:<15} {}",
+                                "--".bold(),
+                                "----".bold(),
+                                "-------".bold(),
+                                "---------".bold()
+                            );
                             for s in &sessions {
                                 let created = chrono::DateTime::from_timestamp(s.created_at, 0)
                                     .map(|dt| dt.format("%H:%M:%S").to_string())
@@ -404,8 +461,10 @@ impl RcfConsole {
                                 let last_seen = chrono::DateTime::from_timestamp(s.last_seen, 0)
                                     .map(|dt| dt.format("%H:%M:%S").to_string())
                                     .unwrap_or_else(|| "?".to_string());
-                                println!("  {:<6} {:<20} {:<15} {}",
-                                    s.num, s.info, created, last_seen);
+                                println!(
+                                    "  {:<6} {:<20} {:<15} {}",
+                                    s.num, s.info, created, last_seen
+                                );
                             }
                         }
                         Err(e) => {
@@ -416,7 +475,10 @@ impl RcfConsole {
             });
         } else if self.context.sessions.is_empty() {
             println!("{} No active sessions", "[*]".cyan());
-            println!("{} (Tip: Start C2 server with 'rcf c2 listen' to enable session management)", "[*]".yellow());
+            println!(
+                "{} (Tip: Start C2 server with 'rcf c2 listen' to enable session management)",
+                "[*]".yellow()
+            );
         } else {
             println!("\n{}", "Active Sessions".bold().green());
             for id in &self.context.sessions {
@@ -472,7 +534,10 @@ impl RcfConsole {
             Some(c) => c.clone(),
             None => {
                 println!("{} No C2 control server connected", "[-]".red());
-                println!("{} (Tip: Start C2 server with 'rcf c2 listen')", "[*]".yellow());
+                println!(
+                    "{} (Tip: Start C2 server with 'rcf c2 listen')",
+                    "[*]".yellow()
+                );
                 return;
             }
         };
@@ -531,10 +596,8 @@ impl RcfConsole {
                                                     eprint!("[!] {}", stderr);
                                                 }
 
-                                                if let Ok(code) = exit_code.parse::<i32>() {
-                                                    if code != 0 {
-                                                        eprintln!("[!] Exit code: {}", code);
-                                                    }
+                                                if let Ok(code) = exit_code.parse::<i32>() && code != 0 {
+                                                    eprintln!("[!] Exit code: {}", code);
                                                 }
                                             }
                                         }
@@ -563,7 +626,10 @@ impl RcfConsole {
 
     fn cmd_save(&self, path: &Option<String>) -> Result<()> {
         let p = path.as_deref().unwrap_or("rcf_context.toml");
-        let toml = self.context.to_toml().map_err(|e| rcf_core::RcfError::Config(e.to_string()))?;
+        let toml = self
+            .context
+            .to_toml()
+            .map_err(|e| rcf_core::RcfError::Config(e.to_string()))?;
         std::fs::write(p, toml)?;
         println!("{} Context saved to {}", "[+]".green(), p);
         Ok(())
@@ -572,7 +638,8 @@ impl RcfConsole {
     fn cmd_load(&mut self, path: &Option<String>) -> Result<()> {
         let p = path.as_deref().unwrap_or("rcf_context.toml");
         let content = std::fs::read_to_string(p)?;
-        self.context = Context::from_toml(&content).map_err(|e| rcf_core::RcfError::Config(e.to_string()))?;
+        self.context =
+            Context::from_toml(&content).map_err(|e| rcf_core::RcfError::Config(e.to_string()))?;
         println!("{} Context loaded from {}", "[+]".green(), p);
         Ok(())
     }
@@ -585,10 +652,16 @@ impl RcfConsole {
             return;
         }
 
-        self.global_variables.insert(key.to_uppercase(), value.to_string());
+        self.global_variables
+            .insert(key.to_uppercase(), value.to_string());
         // Also set on context for immediate use
         self.context.set(key, value);
-        println!("{} {} => {} (global)", "[+]".green(), key.bold(), value.bold());
+        println!(
+            "{} {} => {} (global)",
+            "[+]".green(),
+            key.bold(),
+            value.bold()
+        );
     }
 
     fn cmd_unsetg(&mut self, key: &str) {
@@ -616,13 +689,26 @@ impl RcfConsole {
         let script = match ResourceScript::from_file(&path) {
             Ok(s) => s,
             Err(e) => {
-                println!("{} Failed to read resource script '{}': {}", "[-]".red(), path, e);
+                println!(
+                    "{} Failed to read resource script '{}': {}",
+                    "[-]".red(),
+                    path,
+                    e
+                );
                 return Ok(());
             }
         };
 
-        println!("\n{} Executing resource script: {}", "[*]".cyan(), path.bold());
-        println!("{} {} commands to execute\n", "[*]".cyan(), script.command_count());
+        println!(
+            "\n{} Executing resource script: {}",
+            "[*]".cyan(),
+            path.bold()
+        );
+        println!(
+            "{} {} commands to execute\n",
+            "[*]".cyan(),
+            script.command_count()
+        );
 
         let executor = ResourceExecutor::new();
 
@@ -639,13 +725,15 @@ impl RcfConsole {
         // This is a known workaround for Rust's async closure borrow limitations.
         let self_ptr = self as *mut Self;
 
-        let result = executor.execute(&script, |cmd| {
-            let vars = variables.clone();
-            async move {
-                let self_ref = unsafe { &mut *self_ptr };
-                self_ref.execute_resource_command(&cmd, &vars).await
-            }
-        }).await;
+        let result = executor
+            .execute(&script, |cmd| {
+                let vars = variables.clone();
+                async move {
+                    let self_ref = unsafe { &mut *self_ptr };
+                    self_ref.execute_resource_command(&cmd, &vars).await
+                }
+            })
+            .await;
 
         println!("\n{}", result.summary());
 
@@ -660,7 +748,11 @@ impl RcfConsole {
     }
 
     /// Execute a single command from a resource script.
-    async fn execute_resource_command(&mut self, line: &str, _variables: &HashMap<String, String>) -> std::result::Result<(), String> {
+    async fn execute_resource_command(
+        &mut self,
+        line: &str,
+        _variables: &HashMap<String, String>,
+    ) -> std::result::Result<(), String> {
         let cmd = parse_command(line);
 
         match cmd {
@@ -750,7 +842,10 @@ impl RcfConsole {
                 // Skip these in resource scripts
             }
             _ => {
-                return Err(format!("Unknown or unsupported command in resource script: {}", line));
+                return Err(format!(
+                    "Unknown or unsupported command in resource script: {}",
+                    line
+                ));
             }
         }
 
@@ -758,7 +853,11 @@ impl RcfConsole {
     }
 
     fn handle_unknown(&self, parts: &[String]) -> Result<()> {
-        println!("{} Unknown command: '{}'. Type 'help' for commands.", "[-]".red(), parts[0]);
+        println!(
+            "{} Unknown command: '{}'. Type 'help' for commands.",
+            "[-]".red(),
+            parts[0]
+        );
         Ok(())
     }
 
@@ -773,13 +872,16 @@ impl RcfConsole {
    ╚══════════════════════════════════════════════╝
 "#;
         println!("{}", banner.bold().cyan());
-        println!("  {} modules loaded | Type 'help' for commands\n", self.manager.registry().len());
+        println!(
+            "  {} modules loaded | Type 'help' for commands\n",
+            self.manager.registry().len()
+        );
     }
 
     fn build_prompt(&self) -> String {
         if let Some(ref module) = self.context.current_module {
             // Extract short name from full path
-            let short = module.split('/').last().unwrap_or(module);
+            let short = module.split('/').next_back().unwrap_or(module);
             format!("rcf {} > ", short.red().bold())
         } else {
             "rcf > ".to_string()
@@ -793,7 +895,12 @@ impl RcfConsole {
             return;
         }
 
-        println!("\n{} {} Modules ({})\n", label.bold().green(), label, modules.len());
+        println!(
+            "\n{} {} Modules ({})\n",
+            label.bold().green(),
+            label,
+            modules.len()
+        );
         println!("  {:<45} {}", "Name".bold(), "Description".bold());
         println!("  {:<45} {}", "----".bold(), "-----------".bold());
 

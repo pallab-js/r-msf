@@ -1,25 +1,20 @@
 //! Payload generator and compiler (RCF-Venom).
 //!
-//! Generates obfuscated shellcode and cross-compiled payloads for:
-//! - Unix (x86_64, ARM64)
-//! - Windows (x86, x64)
-//! - macOS (x86_64, ARM64)
+//! Generates obfuscated shellcode for Linux (x86_64, x86).
 //!
-//! Supports encoding, encryption, polymorphic obfuscation, and staged delivery.
+//! Supports encoding, polymorphic obfuscation, and staged delivery.
 
-pub mod generator;
 pub mod encoder;
-pub mod templates;
-pub mod polymorphic;
-pub mod output;
-pub mod pe_builder;
 pub mod executor;
+pub mod generator;
+pub mod output;
+pub mod polymorphic;
 pub mod stager;
+pub mod templates;
 
-pub use generator::{PayloadConfig, PayloadType, PayloadGenerator, Platform, Arch};
 pub use encoder::PayloadEncoder;
-pub use polymorphic::PolymorphicEngine;
+pub use executor::{ExecutionResult, PayloadExecutor};
+pub use generator::{Arch, PayloadConfig, PayloadGenerator, PayloadType, Platform};
 pub use output::{OutputFormat, PayloadOutput};
-pub use pe_builder::PeBuilder;
-pub use executor::{PayloadExecutor, ExecutionResult};
+pub use polymorphic::PolymorphicEngine;
 pub use stager::{StageServer, generate_stager, test_stager_connection};

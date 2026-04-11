@@ -3,22 +3,22 @@
 //! This crate provides the foundational abstractions used throughout the framework,
 //! including the Module trait, Context for global state, and common data types.
 
-pub mod error;
-pub mod module;
+pub mod audit;
 pub mod context;
-pub mod target;
+pub mod error;
+pub mod evasion;
+pub mod jobs;
+pub mod module;
+pub mod msf_compat;
 pub mod options;
 pub mod output;
-pub mod jobs;
-pub mod msf_compat;
-pub mod evasion;
-pub mod audit;
+pub mod target;
 
-pub use error::{RcfError, Result};
-pub use module::{Module, ModuleType, ModuleInfo, ModuleCategory};
+pub use audit::{AuditCategory, AuditEntry, AuditLevel, AuditLogger};
 pub use context::Context;
-pub use target::Target;
-pub use options::{ModuleOptions, ModuleOption, OptionValue};
+pub use error::{RcfError, Result};
+pub use jobs::{Job, JobManager, JobStatus};
+pub use module::{Module, ModuleCategory, ModuleInfo, ModuleType};
+pub use options::{ModuleOption, ModuleOptions, OptionValue};
 pub use output::{ModuleOutput, OutputFormat};
-pub use jobs::{JobManager, Job, JobStatus};
-pub use audit::{AuditLogger, AuditEntry, AuditLevel, AuditCategory};
+pub use target::Target;

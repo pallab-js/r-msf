@@ -46,7 +46,12 @@ impl ModuleOption {
         }
     }
 
-    pub fn with_default(name: &str, required: bool, description: &str, default: OptionValue) -> Self {
+    pub fn with_default(
+        name: &str,
+        required: bool,
+        description: &str,
+        default: OptionValue,
+    ) -> Self {
         Self {
             name: name.to_string(),
             required,

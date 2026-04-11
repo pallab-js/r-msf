@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 use rcf_core::Context;
 use rcf_modules::builtin::register_builtin_modules;
@@ -265,11 +265,19 @@ fn validate_write_path(path: &str) -> anyhow::Result<()> {
     // Block obvious dangerous paths (case-insensitive prefix check)
     let lower = path.to_lowercase();
     let dangerous_prefixes = [
-        "/etc/", "/usr/", "/var/", "/root/", "/proc/", "/sys/",
-        "/system/", "/boot/", "/applications/",
-        "c:\\windows", "c:\\program files",
+        "/etc/",
+        "/usr/",
+        "/var/",
+        "/root/",
+        "/proc/",
+        "/sys/",
+        "/system/",
+        "/boot/",
+        "/applications/",
+        "c:\\windows",
+        "c:\\program files",
     ];
-    
+
     for prefix in dangerous_prefixes {
         if lower.starts_with(prefix) {
             anyhow::bail!("Output path targets a protected system directory: {}", path);
@@ -287,7 +295,10 @@ fn validate_write_path(path: &str) -> anyhow::Result<()> {
     let parent_count = path.split('/').filter(|&s| s == "..").count()
         + path.split('\\').filter(|&s| s == "..").count();
     if parent_count > 3 {
-        anyhow::bail!("Output path uses excessive parent directory traversal: {}", path);
+        anyhow::bail!(
+            "Output path uses excessive parent directory traversal: {}",
+            path
+        );
     }
 
     Ok(())
@@ -298,11 +309,7 @@ async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     // Initialize tracing
-    let filter = if cli.verbose {
-        "debug"
-    } else {
-        "info"
-    };
+    let filter = if cli.verbose { "debug" } else { "info" };
 
     tracing_subscriber::registry()
         .with(
@@ -340,12 +347,10 @@ async fn main() -> anyhow::Result<()> {
     // Load context from file if specified
     if let Some(ref path) = cli.context_file {
         match std::fs::read_to_string(path) {
-            Ok(content) => {
-                match Context::from_toml(&content) {
-                    Ok(loaded) => context = loaded,
-                    Err(e) => eprintln!("Failed to parse context file: {}", e),
-                }
-            }
+            Ok(content) => match Context::from_toml(&content) {
+                Ok(loaded) => context = loaded,
+                Err(e) => eprintln!("Failed to parse context file: {}", e),
+            },
             Err(e) => eprintln!("Failed to read context file: {}", e),
         }
     }
@@ -373,7 +378,18 @@ async fn main() -> anyhow::Result<()> {
             staged,
             stage_output,
         }) => {
-            run_venom(&payload, &lhost, lport, &format, output.as_deref(), encoder.as_deref(), execute, staged, stage_output.as_deref()).await?;
+            run_venom(
+                &payload,
+                &lhost,
+                lport,
+                &format,
+                output.as_deref(),
+                encoder.as_deref(),
+                execute,
+                staged,
+                stage_output.as_deref(),
+            )
+            .await?;
             return Ok(());
         }
 
@@ -396,7 +412,11 @@ async fn main() -> anyhow::Result<()> {
         }
 
         #[cfg(feature = "c2")]
-        Some(Commands::C2 { lhost, lport, command }) => {
+        Some(Commands::C2 {
+            lhost,
+            lport,
+            command,
+        }) => {
             run_c2(&lhost, lport, command).await?;
             return Ok(());
         }
@@ -418,7 +438,11 @@ async fn main() -> anyhow::Result<()> {
         }
 
         #[cfg(feature = "db")]
-        Some(Commands::Auto { target, output, aggressive }) => {
+        Some(Commands::Auto {
+            target,
+            output,
+            aggressive,
+        }) => {
             run_auto(&target, output.as_deref(), aggressive).await?;
             return Ok(());
         }
@@ -486,7 +510,10 @@ async fn run_module_non_interactive(
 
     let target = rcf_core::Target::new(target_host, target_port);
 
-    println!("[*] Running {} against {}:{}", module_name, target_host, target_port);
+    println!(
+        "[*] Running {} against {}:{}",
+        module_name, target_host, target_port
+    );
     let output = module.run(&mut ctx, &target).await?;
     println!("{}", output.render());
 
@@ -501,13 +528,9 @@ fn run_venom_agent(lhost: &str, lport: u16, output: Option<&str>) -> anyhow::Res
 
     // Build the agent with baked-in connection parameters
     let status = std::process::Command::new("cargo")
-        .args([
-            "build",
-            "-p", "rcf-agent",
-            "--release",
-        ])
+        .args(["build", "-p", "rcf-agent", "--release"])
         .env("RCF_AGENT_HOST", lhost)
-        .env("RCF_AGENT_PORT", &lport.to_string())
+        .env("RCF_AGENT_PORT", lport.to_string())
         .env_remove("RCF_AGENT_PSK") // No PSK by default; user can set via CLI args on agent
         .status()
         .map_err(|e| anyhow::anyhow!("Failed to run cargo build: {}", e))?;
@@ -517,11 +540,14 @@ fn run_venom_agent(lhost: &str, lport: u16, output: Option<&str>) -> anyhow::Res
     }
 
     let built_path = "target/release/rcf-agent";
-    let size = std::fs::metadata(built_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size = std::fs::metadata(built_path).map(|m| m.len()).unwrap_or(0);
 
-    println!("\n{} Agent built: {} ({} bytes)", "[+]".green(), built_path, size);
+    println!(
+        "\n{} Agent built: {} ({} bytes)",
+        "[+]".green(),
+        built_path,
+        size
+    );
 
     // Copy to output path if specified
     if let Some(out_path) = output {
@@ -532,17 +558,20 @@ fn run_venom_agent(lhost: &str, lport: u16, output: Option<&str>) -> anyhow::Res
     }
 
     println!("\n{} Usage:", "[*]".yellow());
-    println!("  {} ./rcf-agent  (connects to {}:{})", "   ", lhost, lport);
-    println!("  {} ./rcf-agent --host <ip> --port <port> --psk <key>  (override defaults)", "   ");
+    println!("       ./rcf-agent  (connects to {}:{})", lhost, lport);
+    println!("       ./rcf-agent --host <ip> --port <port> --psk <key>  (override defaults)");
 
     Ok(())
 }
 
 /// Run a stage server that delivers stages to connecting stagers.
-async fn run_venom_stage_server(lhost: &str, lport: u16, stage_output: Option<&str>) -> anyhow::Result<()> {
+async fn run_venom_stage_server(
+    lhost: &str,
+    lport: u16,
+    stage_output: Option<&str>,
+) -> anyhow::Result<()> {
     use rcf_payload::{
-        PayloadConfig, PayloadType, PayloadGenerator,
-        Platform, Arch, OutputFormat, StageServer,
+        Arch, OutputFormat, PayloadConfig, PayloadGenerator, PayloadType, Platform, StageServer,
     };
 
     println!("{}", "[*] RCF-Venom — Stage Server".bold().green());
@@ -585,20 +614,35 @@ async fn run_venom_stage_server(lhost: &str, lport: u16, stage_output: Option<&s
         validate_write_path(path)?;
         std::fs::write(path, &stage_data)
             .map_err(|e| anyhow::anyhow!("Failed to write stage to {}: {}", path, e))?;
-        println!("\n{} Stage saved to: {} ({} bytes)", "[+]".green(), path, stage_data.len());
+        println!(
+            "\n{} Stage saved to: {} ({} bytes)",
+            "[+]".green(),
+            path,
+            stage_data.len()
+        );
     }
 
-    println!("\n{} Stage size: {} bytes", "[*]".yellow(), stage_data.len());
+    println!(
+        "\n{} Stage size: {} bytes",
+        "[*]".yellow(),
+        stage_data.len()
+    );
     println!("{} Platform: {}/{}", "[*]".yellow(), platform, arch);
     println!("\n{} Starting stage server...", "[*]".cyan());
-    println!("{} Stagers connecting will receive this stage", "[*]".cyan());
+    println!(
+        "{} Stagers connecting will receive this stage",
+        "[*]".cyan()
+    );
     println!("{} Press Ctrl+C to stop\n", "[*]".cyan());
 
     // Start the stage server
     let server = StageServer::new(stage_data, lport);
-    server.run().map_err(|e| anyhow::anyhow!("Stage server error: {}", e))
+    server
+        .run()
+        .map_err(|e| anyhow::anyhow!("Stage server error: {}", e))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_venom(
     payload_type: &str,
     lhost: &str,
@@ -611,8 +655,7 @@ async fn run_venom(
     stage_output: Option<&str>,
 ) -> anyhow::Result<()> {
     use rcf_payload::{
-        PayloadConfig, PayloadType, PayloadGenerator, PayloadEncoder,
-        Platform, Arch, OutputFormat, StageServer,
+        Arch, OutputFormat, PayloadConfig, PayloadEncoder, PayloadGenerator, PayloadType, Platform,
     };
 
     println!("{}", "[*] RCF-Venom — Payload Generator".bold().green());
@@ -628,12 +671,10 @@ async fn run_venom(
     }
 
     // Parse payload type
-    let ptype: PayloadType = payload_type
-        .parse()
-        .unwrap_or_else(|_| {
-            eprintln!("Unknown payload type: {}. Using reverse_tcp.", payload_type);
-            PayloadType::ReverseTcp
-        });
+    let ptype: PayloadType = payload_type.parse().unwrap_or_else(|_| {
+        eprintln!("Unknown payload type: {}. Using reverse_tcp.", payload_type);
+        PayloadType::ReverseTcp
+    });
 
     // Parse platform and arch from env or defaults
     let platform = std::env::var("RCF_PLATFORM")
@@ -656,9 +697,7 @@ async fn run_venom(
     }
 
     // Parse output format
-    let out_format: OutputFormat = format
-        .parse()
-        .unwrap_or_else(|_| OutputFormat::C);
+    let out_format: OutputFormat = format.parse().unwrap_or(OutputFormat::C);
 
     // Build encoder
     let enc = match encoder {
@@ -708,21 +747,22 @@ async fn run_venom(
         let canonical = std::fs::canonicalize(path).ok();
         if let Some(real) = canonical {
             let real_lower = real.to_string_lossy().to_lowercase();
-            if real_lower.contains("/etc/") || real_lower.contains("/usr/")
-                || real_lower.contains("/var/") || real_lower.contains("/root/")
-                || real_lower.contains("/proc/") || real_lower.contains("/sys/")
-                || real_lower.contains("/system/") || real_lower.contains("/boot/")
-                || real_lower.contains("/applications/") {
+            if real_lower.contains("/etc/")
+                || real_lower.contains("/usr/")
+                || real_lower.contains("/var/")
+                || real_lower.contains("/root/")
+                || real_lower.contains("/proc/")
+                || real_lower.contains("/sys/")
+                || real_lower.contains("/system/")
+                || real_lower.contains("/boot/")
+                || real_lower.contains("/applications/")
+            {
                 anyhow::bail!("Refusing to write payload to protected system directory");
             }
         }
 
         let data = match out_format {
             OutputFormat::Raw => payload_output.shellcode.clone(),
-            OutputFormat::Pe => {
-                let builder = rcf_payload::PeBuilder::new();
-                builder.build(&payload_output.shellcode, &arch, 0)
-            }
             _ => payload_output.formatted.as_bytes().to_vec(),
         };
         std::fs::write(path, &data)?;
@@ -731,7 +771,12 @@ async fn run_venom(
 
     // Execute payload locally if requested
     if execute {
-        println!("\n{}", "[*] Executing payload locally (testing mode)".bold().yellow());
+        println!(
+            "\n{}",
+            "[*] Executing payload locally (testing mode)"
+                .bold()
+                .yellow()
+        );
         let executor = rcf_payload::PayloadExecutor::new();
         match executor.execute_shellcode(&payload_output.shellcode, &arch, 10) {
             Ok(result) => {
@@ -753,10 +798,10 @@ async fn run_scan(
     timeout: u64,
     format: &str,
 ) -> anyhow::Result<()> {
-    use rcf_network::scanner::{TcpConnectScanner, PortRange, ScanConfig};
-    use rcf_core::target::parse_targets;
-    use std::time::Duration;
     use colored::Colorize;
+    use rcf_core::target::parse_targets;
+    use rcf_network::scanner::{PortRange, ScanConfig, TcpConnectScanner};
+    use std::time::Duration;
 
     // Parse targets (supports CIDR, ranges, comma-separated)
     let targets = parse_targets(target, 80)?;
@@ -774,7 +819,7 @@ async fn run_scan(
         PortRange::Common
     });
 
-    let scanner = TcpConnectScanner::new();
+    let _scanner = TcpConnectScanner::new();
 
     // Scan all targets in parallel
     let mut all_open: Vec<(String, Vec<_>)> = Vec::new();
@@ -804,7 +849,7 @@ async fn run_scan(
                 .with_ports(port_range)
                 .with_concurrency(1)
                 .with_timeout(timeout_dur);
-            
+
             let scanner = TcpConnectScanner::new();
             let results = scanner.scan(&config).await;
             drop(permit);
@@ -817,11 +862,13 @@ async fn run_scan(
     // Collect results
     for handle in handles {
         if let Ok((host, results)) = handle.await {
-            let open: Vec<_> = results.iter()
+            let open: Vec<_> = results
+                .iter()
                 .filter(|r| r.state == rcf_network::scanner::PortState::Open)
                 .cloned()
                 .collect();
-            let filtered: Vec<_> = results.iter()
+            let filtered: Vec<_> = results
+                .iter()
                 .filter(|r| r.state == rcf_network::scanner::PortState::Filtered)
                 .cloned()
                 .collect();
@@ -837,36 +884,53 @@ async fn run_scan(
     }
 
     // Print summary
-    println!("\n  Scanned {} targets, {} ports total, {} open, {} filtered\n",
-        target_count, total_ports, total_open, total_filtered);
+    println!(
+        "\n  Scanned {} targets, {} ports total, {} open, {} filtered\n",
+        target_count, total_ports, total_open, total_filtered
+    );
 
     if all_open.is_empty() {
         println!("  No open ports found across all targets.");
     } else {
         if format == "json" {
-            let json_results: Vec<_> = all_open.iter().flat_map(|(host, opens)| {
-                let host = host.clone();
-                opens.iter().map(move |r| {
-                    serde_json::json!({
-                        "host": host,
-                        "port": r.port,
-                        "protocol": r.protocol,
-                        "state": r.state.to_string(),
-                        "service": r.service,
-                        "version": r.version,
-                        "banner": r.banner,
-                        "rtt_ms": r.rtt_ms,
+            let json_results: Vec<_> = all_open
+                .iter()
+                .flat_map(|(host, opens)| {
+                    let host = host.clone();
+                    opens.iter().map(move |r| {
+                        serde_json::json!({
+                            "host": host,
+                            "port": r.port,
+                            "protocol": r.protocol,
+                            "state": r.state.to_string(),
+                            "service": r.service,
+                            "version": r.version,
+                            "banner": r.banner,
+                            "rtt_ms": r.rtt_ms,
+                        })
                     })
                 })
-            }).collect();
+                .collect();
             println!("{}", serde_json::to_string_pretty(&json_results)?);
         } else {
             // Text table grouped by host
             for (host, opens) in &all_open {
                 println!("  {}", format!("Host: {}", host).bold().cyan());
-                println!("  {:<10} {:<6} {:<18}  {}", "Port".bold(), "Proto".bold(), "Service".bold(), "Details".bold());
-                println!("  {:<10} {:<6} {:<18}  {}", "----".bold(), "-----".bold(), "-------".bold(), "---------".bold());
-                
+                println!(
+                    "  {:<10} {:<6} {:<18}  {}",
+                    "Port".bold(),
+                    "Proto".bold(),
+                    "Service".bold(),
+                    "Details".bold()
+                );
+                println!(
+                    "  {:<10} {:<6} {:<18}  {}",
+                    "----".bold(),
+                    "-----".bold(),
+                    "-------".bold(),
+                    "---------".bold()
+                );
+
                 for r in opens {
                     let details = match (&r.version, &r.banner, r.rtt_ms) {
                         (Some(v), _, Some(rtt)) => format!("{} ({:.0}ms)", v, rtt),
@@ -876,7 +940,8 @@ async fn run_scan(
                         (_, Some(b), _) => b.clone(),
                         _ => String::new(),
                     };
-                    println!("  {:<10} {:<6} {:<18}  {}",
+                    println!(
+                        "  {:<10} {:<6} {:<18}  {}",
                         format!("{}/tcp", r.port),
                         r.protocol,
                         r.service.as_deref().unwrap_or("unknown"),
@@ -889,7 +954,10 @@ async fn run_scan(
     }
 
     if total_filtered > 0 {
-        println!("  {} total filtered ports across all targets", total_filtered);
+        println!(
+            "  {} total filtered ports across all targets",
+            total_filtered
+        );
     }
 
     Ok(())
@@ -898,7 +966,7 @@ async fn run_scan(
 #[cfg(feature = "db")]
 fn run_db(file: Option<&str>, command: &DbCommands) -> anyhow::Result<()> {
     use rcf_db::connection::RcfDatabase;
-    use rcf_db::export::{export_all, ExportFormat};
+    use rcf_db::export::{ExportFormat, export_all};
 
     let default_path = dirs::home_dir()
         .map(|p| p.join(".rcf").join("rcf.db").to_string_lossy().to_string())
@@ -907,10 +975,10 @@ fn run_db(file: Option<&str>, command: &DbCommands) -> anyhow::Result<()> {
     let path = file.unwrap_or(&default_path);
 
     // Ensure parent directory exists
-    if let Some(parent) = std::path::Path::new(path).parent() {
-        if !parent.exists() {
-            std::fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = std::path::Path::new(path).parent()
+        && !parent.exists()
+    {
+        std::fs::create_dir_all(parent)?;
     }
 
     let mut db = RcfDatabase::new(path)?;
@@ -1022,16 +1090,23 @@ fn run_db(file: Option<&str>, command: &DbCommands) -> anyhow::Result<()> {
             let canonical = std::fs::canonicalize(output).ok();
             if let Some(real) = canonical {
                 let real_lower = real.to_string_lossy().to_lowercase();
-                if real_lower.contains("/etc/") || real_lower.contains("/usr/")
-                    || real_lower.contains("/var/") || real_lower.contains("/root/")
-                    || real_lower.contains("/proc/") || real_lower.contains("/sys/")
-                    || real_lower.contains("/system/") || real_lower.contains("/boot/")
-                    || real_lower.contains("/applications/") {
+                if real_lower.contains("/etc/")
+                    || real_lower.contains("/usr/")
+                    || real_lower.contains("/var/")
+                    || real_lower.contains("/root/")
+                    || real_lower.contains("/proc/")
+                    || real_lower.contains("/sys/")
+                    || real_lower.contains("/system/")
+                    || real_lower.contains("/boot/")
+                    || real_lower.contains("/applications/")
+                {
                     anyhow::bail!("Refusing to export database to protected system directory");
                 }
             }
 
-            let fmt: ExportFormat = format.parse().map_err(|e| anyhow::anyhow!("Invalid export format: {}", e))?;
+            let fmt: ExportFormat = format
+                .parse()
+                .map_err(|e| anyhow::anyhow!("Invalid export format: {}", e))?;
             let data = export_all(&mut db, &fmt)?;
             std::fs::write(output, data)?;
             println!("[+] Database exported to {} ({})", output, format);
@@ -1043,9 +1118,9 @@ fn run_db(file: Option<&str>, command: &DbCommands) -> anyhow::Result<()> {
 
 #[cfg(feature = "c2")]
 async fn run_c2(lhost: &str, lport: u16, command: Option<C2Commands>) -> anyhow::Result<()> {
-    use std::sync::Arc;
-    use rcf_c2::server::{C2Server, C2Config};
+    use rcf_c2::server::{C2Config, C2Server};
     use rcf_c2::session::SessionManager;
+    use std::sync::Arc;
 
     let sessions = Arc::new(SessionManager::new());
 
@@ -1062,7 +1137,12 @@ async fn run_c2(lhost: &str, lport: u16, command: Option<C2Commands>) -> anyhow:
             println!("{}", sessions.format_sessions().await);
         }
         Some(C2Commands::Interact { session }) => {
-            println!("{}", format!("[*] Interacting with session {}", session).bold().green());
+            println!(
+                "{}",
+                format!("[*] Interacting with session {}", session)
+                    .bold()
+                    .green()
+            );
             println!("[*] Session interaction coming in next update");
         }
         Some(C2Commands::Kill { session }) => {
@@ -1088,10 +1168,10 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     /// Escape HTML special characters to prevent XSS in reports.
     fn html_escape(s: &str) -> String {
         s.replace('&', "&amp;")
-         .replace('<', "&lt;")
-         .replace('>', "&gt;")
-         .replace('"', "&quot;")
-         .replace('\'', "&#x27;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&#x27;")
     }
 
     /// Validate that a file path doesn't traverse outside the current directory.
@@ -1099,9 +1179,15 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     fn validate_output_path(path: &str) -> anyhow::Result<String> {
         // Block obvious dangerous paths
         let lower = path.to_lowercase();
-        if lower.starts_with("/etc/") || lower.starts_with("/usr/") || lower.starts_with("/var/")
-            || lower.starts_with("/root/") || lower.starts_with("/proc/") || lower.starts_with("/sys/")
-            || lower.starts_with("c:\\windows") || lower.starts_with("c:\\program files") {
+        if lower.starts_with("/etc/")
+            || lower.starts_with("/usr/")
+            || lower.starts_with("/var/")
+            || lower.starts_with("/root/")
+            || lower.starts_with("/proc/")
+            || lower.starts_with("/sys/")
+            || lower.starts_with("c:\\windows")
+            || lower.starts_with("c:\\program files")
+        {
             anyhow::bail!("Output path targets a protected system directory: {}", path);
         }
 
@@ -1114,7 +1200,10 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
         // Count parent traversals
         let parent_count = path.split('/').filter(|&s| s == "..").count();
         if parent_count > 3 {
-            anyhow::bail!("Output path uses excessive parent directory traversal: {}", path);
+            anyhow::bail!(
+                "Output path uses excessive parent directory traversal: {}",
+                path
+            );
         }
 
         Ok(path.to_string())
@@ -1125,10 +1214,9 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
             db.clone().unwrap_or_else(|| "rcf.db".to_string()),
             validate_output_path(output)?,
         ),
-        ReportCommands::Auto { target: _, output } => (
-            "rcf.db".to_string(),
-            validate_output_path(output)?,
-        ),
+        ReportCommands::Auto { target: _, output } => {
+            ("rcf.db".to_string(), validate_output_path(output)?)
+        }
     };
 
     let mut db = RcfDatabase::new(&db_path)?;
@@ -1136,14 +1224,20 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
 
     let stats = db.stats()?;
     let hosts = db.list_hosts()?;
-    let services: Vec<_> = hosts.iter().flat_map(|h| db.list_services(&h.id).unwrap_or_default()).collect();
+    let _services: Vec<_> = hosts
+        .iter()
+        .flat_map(|h| db.list_services(&h.id).unwrap_or_default())
+        .collect();
     let creds = db.list_credentials()?;
     let vulns = db.list_vulnerabilities()?;
 
     let mut html = String::from(include_str!("report_template.html"));
 
     let now = chrono::Utc::now();
-    html = html.replace("{{TITLE}}", &format!("Security Assessment Report - {}", now.format("%Y-%m-%d")));
+    html = html.replace(
+        "{{TITLE}}",
+        &format!("Security Assessment Report - {}", now.format("%Y-%m-%d")),
+    );
     html = html.replace("{{VERSION}}", "0.1.0");
     html = html.replace("{{DATE}}", &now.format("%Y-%m-%d %H:%M UTC").to_string());
     html = html.replace("{{HOSTS_COUNT}}", &stats.hosts.to_string());
@@ -1174,8 +1268,13 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     let mut hosts_rows = String::new();
     for h in &hosts {
         let svc_count = db.list_services(&h.id).map(|s| s.len()).unwrap_or(0);
-        hosts_rows.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
-            html_escape(&h.address), html_escape(&h.state), html_escape(h.os.as_deref().unwrap_or("Unknown")), svc_count));
+        hosts_rows.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+            html_escape(&h.address),
+            html_escape(&h.state),
+            html_escape(h.os.as_deref().unwrap_or("Unknown")),
+            svc_count
+        ));
     }
     html = html.replace("{{HOSTS_ROWS}}", &hosts_rows);
 
@@ -1183,10 +1282,15 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     let mut vulns_rows = String::new();
     for v in &vulns {
         let sev = v.severity.to_lowercase();
-        let badge = if sev.contains("critical") { "critical" }
-                    else if sev.contains("high") { "high" }
-                    else if sev.contains("medium") { "medium" }
-                    else { "low" };
+        let badge = if sev.contains("critical") {
+            "critical"
+        } else if sev.contains("high") {
+            "high"
+        } else if sev.contains("medium") {
+            "medium"
+        } else {
+            "low"
+        };
         vulns_rows.push_str(&format!("<tr><td>{}</td><td><span class='badge {}'>{}</span></td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
             html_escape(&v.name), badge, html_escape(&v.severity), html_escape(&v.host_id), html_escape(&v.service), html_escape(v.cve.as_deref().unwrap_or("-"))));
     }
@@ -1198,8 +1302,14 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     // Credentials
     let mut creds_rows = String::new();
     for c in &creds {
-        creds_rows.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
-            html_escape(&c.host_id), c.port, html_escape(&c.service), html_escape(&c.username), html_escape(&c.password)));
+        creds_rows.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+            html_escape(&c.host_id),
+            c.port,
+            html_escape(&c.service),
+            html_escape(&c.username),
+            html_escape(&c.password)
+        ));
     }
     if creds_rows.is_empty() {
         creds_rows = "<tr><td colspan='5' style='text-align:center; color:#999;'>No credentials discovered</td></tr>".to_string();
@@ -1210,7 +1320,8 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     let mut remediation = String::new();
     if stats.vulnerabilities > 0 {
         remediation.push_str("<div class='remediation'><h4>General Recommendations</h4><ul>");
-        remediation.push_str("<li>Apply security patches to all identified vulnerable services</li>");
+        remediation
+            .push_str("<li>Apply security patches to all identified vulnerable services</li>");
         remediation.push_str("<li>Change all discovered credentials immediately</li>");
         remediation.push_str("<li>Implement network segmentation to limit lateral movement</li>");
         remediation.push_str("<li>Enable logging and monitoring for detected attack vectors</li>");
@@ -1223,19 +1334,27 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     html = html.replace("{{REMEDIATION}}", &remediation);
 
     std::fs::write(&output, html)?;
-    println!("{}", format!("[+] Professional report generated: {}", output).bold().green());
+    println!(
+        "{}",
+        format!("[+] Professional report generated: {}", output)
+            .bold()
+            .green()
+    );
     Ok(())
 }
 
 #[cfg(feature = "db")]
 async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyhow::Result<()> {
-    use rcf_network::scanner::{TcpConnectScanner, PortRange, ScanConfig};
     use rcf_db::connection::RcfDatabase;
+    use rcf_network::scanner::{PortRange, ScanConfig, TcpConnectScanner};
     use std::time::Duration;
 
     println!("{}", "[*] Starting Automated Attack Chain".bold().green());
     println!("  Target: {}", target);
-    println!("  Mode:   {}", if aggressive { "Aggressive" } else { "Stealth" });
+    println!(
+        "  Mode:   {}",
+        if aggressive { "Aggressive" } else { "Stealth" }
+    );
 
     // 1. Initialize DB
     let db_path = format!("/tmp/rcf_{}.db", target.replace('.', "_"));
@@ -1243,7 +1362,11 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
     db.init()?;
 
     // 2. Scan Ports
-    let port_range = if aggressive { PortRange::All } else { PortRange::Common };
+    let port_range = if aggressive {
+        PortRange::All
+    } else {
+        PortRange::Common
+    };
     let config = ScanConfig::new(target)
         .with_ports(port_range)
         .with_concurrency(if aggressive { 500 } else { 100 })
@@ -1251,10 +1374,13 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
 
     let scanner = TcpConnectScanner::new();
     let results = scanner.scan(&config).await;
-    
+
     // Save hosts and services to DB
     let host_id = db.save_host(target)?;
-    let open_count = results.iter().filter(|r| r.state == rcf_network::scanner::PortState::Open).count();
+    let open_count = results
+        .iter()
+        .filter(|r| r.state == rcf_network::scanner::PortState::Open)
+        .count();
     for r in &results {
         if r.state == rcf_network::scanner::PortState::Open {
             let mut svc = rcf_db::models::NewService::new(&host_id, r.port);
@@ -1263,14 +1389,19 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
         }
     }
 
-    println!("{}", format!("[+] Scan complete: {} open ports", open_count).bold().green());
+    println!(
+        "{}",
+        format!("[+] Scan complete: {} open ports", open_count)
+            .bold()
+            .green()
+    );
 
     // 3. Auto-Run relevant modules based on services
     let services = db.list_services(&host_id)?;
     for svc in &services {
         let port = svc.port as u16;
         let name = svc.name.as_deref().unwrap_or("");
-        
+
         match (port, name) {
             (80, _) | (443, _) | (8080, _) | (8443, _) => {
                 println!("  [*] HTTP detected - running web scanners...");
@@ -1290,8 +1421,16 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
 
     // 4. Generate Report
     let report_path = output.unwrap_or("report.html").to_string();
-    run_report(&ReportCommands::Generate { db: Some(db_path), output: report_path.clone() })?;
-    println!("{}", format!("[+] Report saved to: {}", report_path).bold().green());
-    
+    run_report(&ReportCommands::Generate {
+        db: Some(db_path),
+        output: report_path.clone(),
+    })?;
+    println!(
+        "{}",
+        format!("[+] Report saved to: {}", report_path)
+            .bold()
+            .green()
+    );
+
     Ok(())
 }

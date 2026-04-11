@@ -12,7 +12,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-use crate::session::{SessionManager, SessionCommand};
+use crate::session::{SessionCommand, SessionManager};
 
 /// Decodes base64 string to bytes.
 fn base64_decode(input: &str) -> Vec<u8> {
@@ -27,7 +27,10 @@ fn base64_decode(input: &str) -> Vec<u8> {
         }
     };
 
-    let bytes: Vec<u8> = input.bytes().filter(|&b| b != b'\n' && b != b'\r' && b != b' ').collect();
+    let bytes: Vec<u8> = input
+        .bytes()
+        .filter(|&b| b != b'\n' && b != b'\r' && b != b' ')
+        .collect();
     let mut result = Vec::with_capacity(bytes.len() * 3 / 4);
 
     let chunks = bytes.chunks_exact(4);
@@ -44,8 +47,7 @@ fn base64_decode(input: &str) -> Vec<u8> {
     }
 
     if remainder.len() >= 2 {
-        let n = ((table(remainder[0]) as u32) << 18)
-            | ((table(remainder[1]) as u32) << 12);
+        let n = ((table(remainder[0]) as u32) << 18) | ((table(remainder[1]) as u32) << 12);
         result.push((n >> 16) as u8);
         if remainder.len() >= 3 && remainder[2] != b'=' {
             result.push(((n >> 8) & 0xFF) as u8);
@@ -89,7 +91,11 @@ impl SessionHandler {
 
         // Update session with addresses
         self.sessions
-            .update_session_info(self.session_num, &local.to_string(), &format!("connected from {}", peer.ip()))
+            .update_session_info(
+                self.session_num,
+                &local.to_string(),
+                &format!("connected from {}", peer.ip()),
+            )
             .await;
 
         let mut reader = BufReader::new(socket);
@@ -112,11 +118,13 @@ impl SessionHandler {
                     "{} | {}@{} | PID:{} | CWD:{}",
                     os, username, hostname, pid, cwd
                 );
-                self.sessions.update_session_info(
-                    self.session_num,
-                    &local.to_string(),
-                    &format!("{} ({}/{})", session_info, arch, hostname),
-                ).await;
+                self.sessions
+                    .update_session_info(
+                        self.session_num,
+                        &local.to_string(),
+                        &format!("{} ({}/{})", session_info, arch, hostname),
+                    )
+                    .await;
 
                 println!("\n[*] Agent connected:");
                 println!("    Host:     {}", hostname);
@@ -156,7 +164,7 @@ impl SessionHandler {
 
                                 // Broadcast to control socket subscribers
                                 let output_msg = if let Some(code) = exit_code {
-                                    format!("{}\n{}\n{}", 
+                                    format!("{}\n{}\n{}",
                                         base64_encode_simple(stdout.as_bytes()),
                                         base64_encode_simple(stderr.as_bytes()),
                                         code)
@@ -311,7 +319,8 @@ async fn send_upload(
     remote_path: &str,
 ) -> anyhow::Result<()> {
     // Read local file
-    let file_data = tokio::fs::read(local_path).await
+    let file_data = tokio::fs::read(local_path)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to read {}: {}", local_path, e))?;
 
     // Simple base64 encoder (no external dep needed)
@@ -332,7 +341,8 @@ async fn send_upload(
     // Read and display result
     let marker = SessionHandler::read_line(reader).await;
     if let Ok(m) = marker
-        && m == "RCF_OUTPUT" {
+        && m == "RCF_OUTPUT"
+    {
         let (stdout, stderr, exit_code) = SessionHandler::read_output_block(reader).await;
         if !stdout.is_empty() {
             print!("{}", stdout);
@@ -341,7 +351,8 @@ async fn send_upload(
             eprintln!("[!] Upload error: {}", stderr);
         }
         if let Some(code) = exit_code
-            && code != 0 {
+            && code != 0
+        {
             eprintln!("[!] Upload failed with exit code {}", code);
         }
     }

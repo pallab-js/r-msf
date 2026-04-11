@@ -8,7 +8,7 @@ use crate::Arch;
 use std::process::Command;
 
 /// Executes a payload on the local system for testing purposes.
-/// 
+///
 /// # Safety
 /// This actually executes code on the local system. Only use for testing
 /// payloads you have generated yourself.
@@ -25,7 +25,11 @@ impl PayloadExecutor {
     /// # Security
     /// Uses `tempfile` crate to create unpredictable filenames, preventing
     /// symlink attacks on predictable paths like `/tmp/rcf_payload_{pid}`.
-    pub fn execute_elf(&self, elf_data: &[u8], timeout_secs: u64) -> anyhow::Result<ExecutionResult> {
+    pub fn execute_elf(
+        &self,
+        elf_data: &[u8],
+        _timeout_secs: u64,
+    ) -> anyhow::Result<ExecutionResult> {
         // Create a secure temporary file with unpredictable name
         let temp_file = tempfile::Builder::new()
             .prefix("rcf_payload_")
@@ -54,7 +58,11 @@ impl PayloadExecutor {
 
         // Cleanup (tempfile also auto-deletes when dropped)
         if let Err(e) = std::fs::remove_file(&exe_path) {
-            tracing::warn!("Failed to remove payload temp file {}: {}", exe_path.display(), e);
+            tracing::warn!(
+                "Failed to remove payload temp file {}: {}",
+                exe_path.display(),
+                e
+            );
         }
 
         Ok(ExecutionResult {
@@ -66,10 +74,15 @@ impl PayloadExecutor {
 
     /// Execute shellcode by building an ELF wrapper and running it.
     /// This creates a minimal ELF binary that contains the shellcode in its .text section.
-    /// 
+    ///
     /// Note: Full execution requires a Linux system. On macOS, this validates
     /// the Mach-O structure and returns a dry-run result.
-    pub fn execute_shellcode(&self, shellcode: &[u8], arch: &Arch, timeout_secs: u64) -> anyhow::Result<ExecutionResult> {
+    pub fn execute_shellcode(
+        &self,
+        shellcode: &[u8],
+        arch: &Arch,
+        timeout_secs: u64,
+    ) -> anyhow::Result<ExecutionResult> {
         #[cfg(target_os = "macos")]
         {
             // macOS: build Mach-O and validate structure (dry run)
@@ -81,7 +94,8 @@ impl PayloadExecutor {
                      Architecture: {:?}\n\
                      Mach-O binary built successfully\n\
                      Note: Full execution requires Linux for ELF binary execution",
-                    shellcode.len(), arch
+                    shellcode.len(),
+                    arch
                 ),
                 stderr: String::new(),
                 exit_code: 0,
@@ -119,7 +133,7 @@ impl PayloadExecutor {
     fn build_macho_x64(&self, shellcode: &[u8]) -> anyhow::Result<Vec<u8>> {
         // Minimal Mach-O x64 executable
         let mut macho = Vec::new();
-        
+
         // Mach-O Header (64-bit)
         macho.extend_from_slice(&0xfeedfacfu32.to_ne_bytes()); // magic (MH_MAGIC_64)
         macho.extend_from_slice(&0x01000007u32.to_ne_bytes()); // cputype (CPU_TYPE_X86_64) | CPU_ARCH_ABI64
@@ -171,7 +185,9 @@ impl PayloadExecutor {
         macho.extend_from_slice(&0u64.to_ne_bytes()); // rbp
         macho.extend_from_slice(&0u64.to_ne_bytes()); // rsp
         macho.extend_from_slice(&0u64.to_ne_bytes()); // r8-r15
-        for _ in 0..8 { macho.extend_from_slice(&0u64.to_ne_bytes()); }
+        for _ in 0..8 {
+            macho.extend_from_slice(&0u64.to_ne_bytes());
+        }
         macho.extend_from_slice(&0x1000u64.to_ne_bytes()); // rip (entry point = start of shellcode)
         macho.extend_from_slice(&0u64.to_ne_bytes()); // rflags
         macho.extend_from_slice(&0u32.to_ne_bytes()); // cs
@@ -192,9 +208,9 @@ impl PayloadExecutor {
     fn build_elf_x64(&self, shellcode: &[u8]) -> anyhow::Result<Vec<u8>> {
         // Minimal x64 ELF with shellcode in executable section
         // This is a simplified ELF builder for testing purposes
-        
+
         let mut elf = Vec::new();
-        
+
         // ELF Header (64-bit)
         elf.extend_from_slice(&[0x7f, b'E', b'L', b'F']); // e_ident[EI_MAG]
         elf.push(2); // EI_CLASS: ELFCLASS64
@@ -251,7 +267,7 @@ impl PayloadExecutor {
     /// Build x86 ELF binary.
     fn build_elf_x86(&self, shellcode: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut elf = Vec::new();
-        
+
         // ELF Header (32-bit)
         elf.extend_from_slice(&[0x7f, b'E', b'L', b'F']);
         elf.push(1); // EI_CLASS: ELFCLASS32

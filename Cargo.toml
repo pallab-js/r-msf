@@ -59,6 +59,12 @@ getrandom = "0.2"
 reqwest = { version = "0.12", features = ["rustls-tls"] }
 socket2 = "0.5"
 
+# SSH/SCP
+ssh2 = "0.9"
+
+# FTP
+ftp = "3"
+
 # Payload generation (Phase 3)
 byteorder = "1"
 

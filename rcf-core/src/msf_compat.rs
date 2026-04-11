@@ -111,12 +111,16 @@ impl MsfModuleParser {
         output.push_str("    ModuleOutput, Result, Target,\n");
         output.push_str("};\n\n");
 
-        output.push_str(
-            "static INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {{\n",
-        );
+        output.push_str("static INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {{\n");
         output.push_str(&format!("    name: \"{}\".to_string(),\n", info.name));
-        output.push_str(&format!("    display_name: \"{}\".to_string(),\n", info.name.split('/').next_back().unwrap_or(&info.name)));
-        output.push_str(&format!("    description: \"{}\".to_string(),\n", info.description.replace('"', "\\\"")));
+        output.push_str(&format!(
+            "    display_name: \"{}\".to_string(),\n",
+            info.name.split('/').next_back().unwrap_or(&info.name)
+        ));
+        output.push_str(&format!(
+            "    description: \"{}\".to_string(),\n",
+            info.description.replace('"', "\\\"")
+        ));
         output.push_str("    authors: vec![\n");
         for author in &info.authors {
             output.push_str(&format!("        \"{}\".to_string(),\n", author));
@@ -142,7 +146,10 @@ impl MsfModuleParser {
         output.push_str("    stability: \"imported\".to_string(),\n");
 
         if let Some(ref date) = info.disclosure_date {
-            output.push_str(&format!("    disclosure_date: Some(\"{}\".to_string()),\n", date));
+            output.push_str(&format!(
+                "    disclosure_date: Some(\"{}\".to_string()),\n",
+                date
+            ));
         }
 
         output.push_str("    references: vec![\n");
@@ -153,7 +160,8 @@ impl MsfModuleParser {
         output.push_str("});\n\n");
 
         // Generate module struct
-        let struct_name = info.name
+        let struct_name = info
+            .name
             .split('/')
             .next_back()
             .unwrap_or("ImportedModule")
@@ -177,13 +185,14 @@ impl MsfModuleParser {
         output.push_str("        let mut opts = ModuleOptions::new();\n");
 
         for (key, value) in &info.default_options {
-            output.push_str(
-                "        opts.add(rcf_core::ModuleOption::with_default(\n",
-            );
+            output.push_str("        opts.add(rcf_core::ModuleOption::with_default(\n");
             output.push_str(&format!("            \"{}\",\n", key));
             output.push_str("            false,\n");
             output.push_str("            \"Imported from Metasploit\",\n");
-            output.push_str(&format!("            rcf_core::OptionValue::String(\"{}\".to_string()),\n", value));
+            output.push_str(&format!(
+                "            rcf_core::OptionValue::String(\"{}\".to_string()),\n",
+                value
+            ));
             output.push_str("        ));\n");
         }
 
@@ -193,7 +202,9 @@ impl MsfModuleParser {
         output.push_str("        &self,\n");
         output.push_str("        ctx: &mut Context,\n");
         output.push_str("        _target: &Target,\n");
-        output.push_str("    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {\n");
+        output.push_str(
+            "    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {\n",
+        );
         output.push_str("        let info_name = self.info().name.clone();\n");
         output.push_str("        Box::pin(async move {\n");
         output.push_str("            let msg = \"Imported Metasploit module — implementation pending\".to_string();\n");
@@ -225,9 +236,10 @@ fn extract_quoted_field(content: &str, field: &str) -> Option<String> {
                 return Some(stripped[..end].to_string());
             }
         } else if let Some(stripped) = trimmed.strip_prefix('\'')
-            && let Some(end) = stripped.find('\'') {
-                return Some(stripped[..end].to_string());
-            }
+            && let Some(end) = stripped.find('\'')
+        {
+            return Some(stripped[..end].to_string());
+        }
     }
     None
 }
@@ -236,20 +248,22 @@ fn extract_author_array(content: &str) -> Vec<String> {
     let mut authors = Vec::new();
 
     // Try array format: 'Author' => ['author1', 'author2']
-    if let Some(pos) = content.find("'Author'")
+    if let Some(pos) = content
+        .find("'Author'")
         .or_else(|| content.find("\"Author\""))
     {
         let after = &content[pos..];
         if let Some(start) = after.find('[')
-            && let Some(end) = after[start..].find(']') {
-                let array_content = &after[start + 1..start + end];
-                for author in array_content.split(',') {
-                    let author = author.trim().trim_matches(|c| c == '\'' || c == '"');
-                    if !author.is_empty() {
-                        authors.push(author.to_string());
-                    }
+            && let Some(end) = after[start..].find(']')
+        {
+            let array_content = &after[start + 1..start + end];
+            for author in array_content.split(',') {
+                let author = author.trim().trim_matches(|c| c == '\'' || c == '"');
+                if !author.is_empty() {
+                    authors.push(author.to_string());
                 }
             }
+        }
     }
 
     authors
@@ -258,7 +272,8 @@ fn extract_author_array(content: &str) -> Vec<String> {
 fn extract_references(content: &str) -> Vec<String> {
     let mut refs = Vec::new();
 
-    if let Some(pos) = content.find("'References'")
+    if let Some(pos) = content
+        .find("'References'")
         .or_else(|| content.find("\"References\""))
     {
         let after = &content[pos..];
@@ -318,32 +333,35 @@ fn regex_find_quoted_strings(s: &str) -> Vec<String> {
 fn extract_platforms(content: &str) -> Vec<String> {
     let mut platforms = Vec::new();
 
-    if let Some(pos) = content.find("'Platform'")
+    if let Some(pos) = content
+        .find("'Platform'")
         .or_else(|| content.find("\"Platform\""))
     {
         let after = &content[pos..];
         // Try array format: 'Platform' => ['win', 'linux']
         if let Some(start) = after.find('[')
-            && let Some(end) = after[start..].find(']') {
-                let array_content = &after[start + 1..start + end];
-                for platform in array_content.split(',') {
-                    let p = platform.trim().trim_matches(|c| c == '\'' || c == '"');
-                    if !p.is_empty() {
-                        platforms.push(p.to_string());
-                    }
+            && let Some(end) = after[start..].find(']')
+        {
+            let array_content = &after[start + 1..start + end];
+            for platform in array_content.split(',') {
+                let p = platform.trim().trim_matches(|c| c == '\'' || c == '"');
+                if !p.is_empty() {
+                    platforms.push(p.to_string());
                 }
             }
+        }
         // Try hash format: 'Platform' => { 'win' => [ ... ] }
         else if let Some(start) = after.find('{')
-            && let Some(end) = after[start..].find('}') {
-                let hash_content = &after[start + 1..start + end];
-                for key in hash_content.split(',') {
-                    let key = key.trim().trim_matches(|c| c == '\'' || c == '"');
-                    if !key.is_empty() {
-                        platforms.push(key.to_string());
-                    }
+            && let Some(end) = after[start..].find('}')
+        {
+            let hash_content = &after[start + 1..start + end];
+            for key in hash_content.split(',') {
+                let key = key.trim().trim_matches(|c| c == '\'' || c == '"');
+                if !key.is_empty() {
+                    platforms.push(key.to_string());
                 }
             }
+        }
     }
 
     platforms
@@ -352,20 +370,19 @@ fn extract_platforms(content: &str) -> Vec<String> {
 fn extract_architectures(content: &str) -> Vec<String> {
     let mut archs = Vec::new();
 
-    if let Some(pos) = content.find("'Arch'")
-        .or_else(|| content.find("\"Arch\""))
-    {
+    if let Some(pos) = content.find("'Arch'").or_else(|| content.find("\"Arch\"")) {
         let after = &content[pos..];
         if let Some(start) = after.find('[')
-            && let Some(end) = after[start..].find(']') {
-                let array_content = &after[start + 1..start + end];
-                for arch in array_content.split(',') {
-                    let a = arch.trim().trim_matches(|c| c == '\'' || c == '"');
-                    if !a.is_empty() {
-                        archs.push(a.to_string());
-                    }
+            && let Some(end) = after[start..].find(']')
+        {
+            let array_content = &after[start + 1..start + end];
+            for arch in array_content.split(',') {
+                let a = arch.trim().trim_matches(|c| c == '\'' || c == '"');
+                if !a.is_empty() {
+                    archs.push(a.to_string());
                 }
             }
+        }
     }
 
     archs

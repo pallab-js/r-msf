@@ -108,9 +108,7 @@ pub fn parse_command(line: &str) -> Command {
                     key: key.to_uppercase(),
                 }
             } else {
-                Command::Unset {
-                    key: String::new(),
-                }
+                Command::Unset { key: String::new() }
             }
         }
 
@@ -167,9 +165,7 @@ pub fn parse_command(line: &str) -> Command {
                     key: key.to_uppercase(),
                 }
             } else {
-                Command::UnsetGlobal {
-                    key: String::new(),
-                }
+                Command::UnsetGlobal { key: String::new() }
             }
         }
 

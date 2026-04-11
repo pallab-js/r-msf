@@ -68,14 +68,18 @@ impl ModuleOutput {
     }
 
     fn render_json(&self) -> String {
-        serde_json::to_string_pretty(self).unwrap_or_else(|_| "Error serializing output".to_string())
+        serde_json::to_string_pretty(self)
+            .unwrap_or_else(|_| "Error serializing output".to_string())
     }
 
     fn render_table(&self) -> String {
         let mut lines = Vec::new();
         lines.push(format!("\nModule: {}", self.module));
         lines.push(format!("Target: {}", self.target));
-        lines.push(format!("Status: {}", if self.success { "SUCCESS" } else { "FAILED" }));
+        lines.push(format!(
+            "Status: {}",
+            if self.success { "SUCCESS" } else { "FAILED" }
+        ));
         lines.push(format!("Message: {}", self.message));
 
         if let Some(data) = &self.data {

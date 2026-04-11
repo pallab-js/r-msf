@@ -10,17 +10,19 @@ The project is organized into a Rust workspace with the following crates:
 - **`rcf-console`**: An interactive REPL (using `rustyline`) providing an `msfconsole`-like experience. Supports resource scripts (`.rc`).
 - **`rcf-modules`**: The registry that manages the loading and registration of all modules.
 - **`rcf-labs`**: Contains 56+ exploit and scanner modules targeting environments like HTB, THM, and OSCP labs.
-- **`rcf-network`**: Implements network-level functionality, including TCP Connect/SYN scanners and protocol fingerprinting.
-- **`rcf-payload`**: Generates shellcode and PE binaries. Includes a polymorphic engine and a staged payload system (stagers in NASM).
+- **`rcf-network`**: Implements network-level functionality, including TCP scanners and protocol fingerprinting.
+- **`rcf-payload`**: Generates shellcode for Linux. Includes a polymorphic engine and a staged payload system (stagers in NASM).
 - **`rcf-db`**: Database layer using SQLite and Diesel. Handles credential storage with Argon2 hashing and vulnerability tracking.
 - **`rcf-c2`**: Command and Control server with PSK authentication, session management, and a sandboxed Meterpreter-style environment.
 - **`rcf-agent`**: A standalone, lightweight C2 agent that connects back to the server.
+
+**Platform: Linux x86_64 only**
 
 ## Building and Running
 
 ### Prerequisites
 - **Rust 2024 Edition** (1.75+)
-- **NASM** (Required for assembling real Windows x64 shellcode; otherwise, safe placeholders are used).
+- **NASM** (Optional: for assembling real Linux x64 shellcode; otherwise, safe placeholders are used).
 
 ### Core Commands
 - **Build Release**: `cargo build --release -p rcf-cli` (or `make release`)
@@ -28,11 +30,10 @@ The project is organized into a Rust workspace with the following crates:
 - **Run Tests**: `cargo test --workspace` (or `make test`)
 - **Lint**: `cargo clippy --workspace -- -D warnings` (or `make lint`)
 - **Format**: `cargo fmt`
-- **Cross-Compile**: `make linux-x64`, `make windows-x64`, `make macos-arm64`.
 
 ### CLI Usage Examples
 - **Scan Subnet**: `rcf scan -t 192.168.1.0/24 --ports common --threads 100`
-- **Generate Payload**: `rcf venom -p reverse_tcp --lhost 10.0.0.1 -f pe -o shell.exe`
+- **Generate Payload**: `rcf venom -p reverse_tcp --lhost 10.0.0.1 -f c`
 - **Start C2**: `rcf c2 listen`
 - **Automated Attack**: `rcf auto -t 10.0.0.5 -o report.html`
 

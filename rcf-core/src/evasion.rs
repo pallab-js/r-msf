@@ -87,7 +87,7 @@ pub fn get_random_agent() -> UserAgentProfile {
         ];
         rng.random_range(0..profiles.len())
     };
-    
+
     let profiles = [
         UserAgentProfile::ChromeWindows,
         UserAgentProfile::ChromeMacOS,

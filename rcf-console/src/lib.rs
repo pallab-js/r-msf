@@ -3,10 +3,10 @@
 //! Provides an msfconsole-like command interface with auto-completion,
 //! history, and module interaction.
 
-pub mod console;
 pub mod commands;
 pub mod completer;
+pub mod console;
 pub mod resource;
 
 pub use console::RcfConsole;
-pub use resource::{ResourceScript, ResourceExecutor};
+pub use resource::{ResourceExecutor, ResourceScript};

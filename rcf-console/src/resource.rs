@@ -44,7 +44,7 @@ impl ResourceScript {
         let canonical = path_ref.canonicalize().map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                format!("Resource script not found: {} ({})", path_ref.display(), e)
+                format!("Resource script not found: {} ({})", path_ref.display(), e),
             )
         })?;
 
@@ -52,7 +52,7 @@ impl ResourceScript {
         if !canonical.is_file() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Not a regular file: {}", canonical.display())
+                format!("Not a regular file: {}", canonical.display()),
             ));
         }
 
@@ -78,8 +78,8 @@ impl ResourceScript {
             }
 
             // Handle line continuations (backslash at end)
-            if trimmed.ends_with('\\') {
-                let mut continued = trimmed[..trimmed.len() - 1].to_string();
+            if let Some(stripped) = trimmed.strip_suffix('\\') {
+                let _continued = stripped.to_string();
                 // Read more lines until we find one without trailing backslash
                 continue; // Simplified — full implementation would track state
             }
@@ -147,11 +147,7 @@ impl ResourceExecutor {
     ///
     /// The callback receives the expanded command line and should return
     /// Ok(()) if successful, or Err(description) if failed.
-    pub async fn execute<F, Fut>(
-        &self,
-        script: &ResourceScript,
-        mut callback: F,
-    ) -> ExecuteResult
+    pub async fn execute<F, Fut>(&self, script: &ResourceScript, mut callback: F) -> ExecuteResult
     where
         F: FnMut(String) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<(), String>>,
@@ -234,7 +230,7 @@ impl ExecuteResult {
 
     /// Format a summary of the execution.
     pub fn summary(&self) -> String {
-        let status = if self.success() {
+        if self.success() {
             format!("{} Resource script completed successfully", "[+]".green())
         } else if self.errors.is_empty() {
             format!(
@@ -254,9 +250,7 @@ impl ExecuteResult {
                     .collect::<Vec<_>>()
                     .join(", ")
             )
-        };
-
-        status
+        }
     }
 }
 

@@ -5,14 +5,14 @@
 //! - TCP SYN scanner using raw sockets (requires root, Linux only)
 //! - UDP scanner (Phase 2.5)
 
-pub mod tcp_connect;
-pub mod tcp_syn;
+pub mod common;
 #[cfg(target_os = "linux")]
 pub mod raw_syn;
-pub mod common;
+pub mod tcp_connect;
+pub mod tcp_syn;
 
-pub use tcp_connect::TcpConnectScanner;
-pub use tcp_syn::TcpSynScanner;
+pub use common::{PortRange, PortState, ScanConfig, ScanResult};
 #[cfg(target_os = "linux")]
 pub use raw_syn::RawSynScanner;
-pub use common::{ScanResult, PortState, ScanConfig, PortRange};
+pub use tcp_connect::TcpConnectScanner;
+pub use tcp_syn::TcpSynScanner;

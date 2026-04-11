@@ -132,7 +132,7 @@ impl ScanConfig {
 }
 
 /// Port range specification.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum PortRange {
     /// Scan a specific range: start..=end
     Range(u16, u16),
@@ -148,13 +148,14 @@ pub enum PortRange {
     All,
     /// Common ports list (21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143,
     /// 443, 445, 993, 995, 1723, 3306, 3389, 5900, 8080, 8443)
+    #[default]
     Common,
 }
 
 /// Common ports list as a static slice (avoids allocation on every call).
 const COMMON_PORTS: &[u16] = &[
-    21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723,
-    3306, 3389, 5900, 8080, 8443,
+    21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 1723, 3306, 3389, 5900,
+    8080, 8443,
 ];
 
 impl PortRange {
@@ -220,19 +221,11 @@ impl PortRange {
                     }
                     Ok(PortRange::Range(start, end))
                 } else {
-                    let port: u16 = s
-                        .parse()
-                        .map_err(|_| format!("invalid port: {}", s))?;
+                    let port: u16 = s.parse().map_err(|_| format!("invalid port: {}", s))?;
                     Ok(PortRange::Single(port))
                 }
             }
         }
-    }
-}
-
-impl Default for PortRange {
-    fn default() -> Self {
-        PortRange::Common
     }
 }
 

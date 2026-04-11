@@ -17,7 +17,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
-use crate::session::{SessionManager, SessionCommand};
+use crate::session::{SessionCommand, SessionManager};
 
 /// Decodes base64 to bytes (simple version, no external dep).
 pub fn base64_decode(input: &str) -> Vec<u8> {
@@ -32,7 +32,10 @@ pub fn base64_decode(input: &str) -> Vec<u8> {
         }
     };
 
-    let bytes: Vec<u8> = input.bytes().filter(|&b| b != b'\n' && b != b'\r' && b != b' ').collect();
+    let bytes: Vec<u8> = input
+        .bytes()
+        .filter(|&b| b != b'\n' && b != b'\r' && b != b' ')
+        .collect();
     let mut result = Vec::with_capacity(bytes.len() * 3 / 4);
 
     let chunks = bytes.chunks_exact(4);
@@ -49,8 +52,7 @@ pub fn base64_decode(input: &str) -> Vec<u8> {
     }
 
     if remainder.len() >= 2 {
-        let n = ((table(remainder[0]) as u32) << 18)
-            | ((table(remainder[1]) as u32) << 12);
+        let n = ((table(remainder[0]) as u32) << 18) | ((table(remainder[1]) as u32) << 12);
         result.push((n >> 16) as u8);
         if remainder.len() >= 3 && remainder[2] != b'=' {
             result.push(((n >> 8) & 0xFF) as u8);
@@ -78,10 +80,7 @@ pub async fn start_control_server(
     }
 }
 
-async fn handle_control_connection(
-    socket: tokio::net::TcpStream,
-    sessions: Arc<SessionManager>,
-) {
+async fn handle_control_connection(socket: tokio::net::TcpStream, sessions: Arc<SessionManager>) {
     let (read_half, mut write_half) = socket.into_split();
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
@@ -109,7 +108,8 @@ async fn handle_control_connection(
         match cmd {
             "LIST_SESSIONS" => {
                 let sessions_list = sessions.list_sessions().await;
-                let json = serde_json::to_string(&sessions_list).unwrap_or_else(|_| "[]".to_string());
+                let json =
+                    serde_json::to_string(&sessions_list).unwrap_or_else(|_| "[]".to_string());
                 let response = format!("OK\n{}\nEND\n", json);
                 let _ = write_half.write_all(response.as_bytes()).await;
                 let _ = write_half.flush().await;
@@ -125,7 +125,9 @@ async fn handle_control_connection(
                         let _ = write_half.write_all(b"ERR\nSession not found\nEND\n").await;
                     }
                 } else {
-                    let _ = write_half.write_all(b"ERR\nInvalid session ID\nEND\n").await;
+                    let _ = write_half
+                        .write_all(b"ERR\nInvalid session ID\nEND\n")
+                        .await;
                 }
                 let _ = write_half.flush().await;
             }
@@ -135,7 +137,9 @@ async fn handle_control_connection(
                     sessions.kill_session(id).await;
                     let _ = write_half.write_all(b"OK\nSession killed\nEND\n").await;
                 } else {
-                    let _ = write_half.write_all(b"ERR\nInvalid session ID\nEND\n").await;
+                    let _ = write_half
+                        .write_all(b"ERR\nInvalid session ID\nEND\n")
+                        .await;
                 }
                 let _ = write_half.flush().await;
             }
@@ -148,7 +152,9 @@ async fn handle_control_connection(
                         break;
                     }
 
-                    let _ = write_half.write_all(b"OK\nInteracting with session\nEND\n").await;
+                    let _ = write_half
+                        .write_all(b"OK\nInteracting with session\nEND\n")
+                        .await;
                     let _ = write_half.flush().await;
 
                     // Subscribe to session output
@@ -201,7 +207,9 @@ async fn handle_control_connection(
                     sessions.unsubscribe_output(session_id).await;
                     break; // Close connection after interact
                 } else {
-                    let _ = write_half.write_all(b"ERR\nInvalid session ID\nEND\n").await;
+                    let _ = write_half
+                        .write_all(b"ERR\nInvalid session ID\nEND\n")
+                        .await;
                     let _ = write_half.flush().await;
                 }
             }
@@ -257,7 +265,10 @@ impl C2ControlClient {
         // SECURITY: Validate JSON size before deserialization to prevent DoS
         let json = json.trim().to_string();
         if json.len() > 1024 * 1024 {
-            anyhow::bail!("Session data too large ({} bytes), possible DoS attempt", json.len());
+            anyhow::bail!(
+                "Session data too large ({} bytes), possible DoS attempt",
+                json.len()
+            );
         }
 
         // Parse as generic Value first to validate structure
@@ -277,7 +288,9 @@ impl C2ControlClient {
     /// Kill a session on the C2 server.
     pub async fn kill_session(&self, session_id: u32) -> anyhow::Result<String> {
         let mut stream = tokio::net::TcpStream::connect(&self.addr).await?;
-        stream.write_all(format!("KILL_SESSION {}\n", session_id).as_bytes()).await?;
+        stream
+            .write_all(format!("KILL_SESSION {}\n", session_id).as_bytes())
+            .await?;
         stream.flush().await?;
 
         let mut reader = BufReader::new(stream);
@@ -301,14 +314,16 @@ impl C2ControlClient {
         &self,
         session_id: u32,
     ) -> anyhow::Result<(
-        tokio::sync::mpsc::Sender<String>,  // send commands
+        tokio::sync::mpsc::Sender<String>,   // send commands
         tokio::sync::mpsc::Receiver<String>, // receive output
     )> {
         let stream = tokio::net::TcpStream::connect(&self.addr).await?;
         let (read_half, mut write_half) = stream.into_split();
 
         // Send INTERACT_START
-        write_half.write_all(format!("INTERACT_START {}\n", session_id).as_bytes()).await?;
+        write_half
+            .write_all(format!("INTERACT_START {}\n", session_id).as_bytes())
+            .await?;
         write_half.flush().await?;
 
         let mut buf_reader = BufReader::new(read_half);

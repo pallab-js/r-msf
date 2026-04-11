@@ -21,12 +21,7 @@ impl HttpFingerprinter {
     }
 
     /// Connect to an HTTP service and extract fingerprints.
-    pub async fn fingerprint(
-        &self,
-        host: &str,
-        port: u16,
-        ssl: bool,
-    ) -> Option<ServiceInfo> {
+    pub async fn fingerprint(&self, host: &str, port: u16, ssl: bool) -> Option<ServiceInfo> {
         let scheme = if ssl { "https" } else { "http" };
         debug!("Fingerprinting {}://{}:{}", scheme, host, port);
 
@@ -34,7 +29,7 @@ impl HttpFingerprinter {
         match self.grab_banner(host, port, ssl).await {
             Some(banner) => {
                 let mut info = ServiceInfo::new(if ssl { "https" } else { "http" });
-                
+
                 // Extract Server header
                 if let Some(server) = extract_header(&banner, "Server") {
                     info.version = Some(server.clone());
@@ -58,11 +53,7 @@ impl HttpFingerprinter {
     /// Grab HTTP banner by sending a HEAD request.
     async fn grab_banner(&self, host: &str, port: u16, _ssl: bool) -> Option<String> {
         let addr = format!("{}:{}", host, port);
-        let result = timeout(
-            Duration::from_secs(5),
-            TcpStream::connect(&addr),
-        )
-        .await;
+        let result = timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await;
 
         let mut stream = match result {
             Ok(Ok(s)) => s,
@@ -84,7 +75,12 @@ impl HttpFingerprinter {
         match timeout(Duration::from_secs(5), stream.read(&mut buf)).await {
             Ok(Ok(n)) => {
                 let response = String::from_utf8_lossy(&buf[..n]).to_string();
-                debug!("HTTP banner ({}:{}):\n{}", host, port, response.lines().take(10).collect::<Vec<_>>().join("\n"));
+                debug!(
+                    "HTTP banner ({}:{}):\n{}",
+                    host,
+                    port,
+                    response.lines().take(10).collect::<Vec<_>>().join("\n")
+                );
                 Some(response)
             }
             _ => None,
@@ -94,11 +90,7 @@ impl HttpFingerprinter {
     /// Grab the page title by fetching the root path.
     pub async fn get_title(&self, host: &str, port: u16, _ssl: bool) -> Option<String> {
         let addr = format!("{}:{}", host, port);
-        let result = timeout(
-            Duration::from_secs(5),
-            TcpStream::connect(&addr),
-        )
-        .await;
+        let result = timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await;
 
         let mut stream = match result {
             Ok(Ok(s)) => s,
@@ -136,10 +128,10 @@ impl Default for HttpFingerprinter {
 fn extract_header(response: &str, header: &str) -> Option<String> {
     let header_lower = header.to_lowercase();
     for line in response.lines() {
-        if let Some((key, value)) = line.split_once(':') {
-            if key.trim().to_lowercase() == header_lower {
-                return Some(value.trim().to_string());
-            }
+        if let Some((key, value)) = line.split_once(':')
+            && key.trim().to_lowercase() == header_lower
+        {
+            return Some(value.trim().to_string());
         }
     }
     None
@@ -149,13 +141,12 @@ fn extract_header(response: &str, header: &str) -> Option<String> {
 fn extract_title(html: &str) -> Option<String> {
     // Find <title>...</title> (case insensitive)
     let html_lower = html.to_lowercase();
-    if let Some(start) = html_lower.find("<title>") {
-        if let Some(end) = html_lower.find("</title>") {
-            if end > start + 7 {
-                let title = &html[start + 7..end];
-                return Some(title.trim().to_string());
-            }
-        }
+    if let Some(start) = html_lower.find("<title>")
+        && let Some(end) = html_lower.find("</title>")
+        && end > start + 7
+    {
+        let title = &html[start + 7..end];
+        return Some(title.trim().to_string());
     }
     None
 }
@@ -163,57 +154,65 @@ fn extract_title(html: &str) -> Option<String> {
 /// Detect common web technologies from HTTP response.
 fn detect_technology(response: &str, info: &mut ServiceInfo) {
     let lower = response.to_lowercase();
-    
+
     // WordPress
     if lower.contains("wp-content") || lower.contains("wordpress") {
-        info.extra.insert("cms".to_string(), "WordPress".to_string());
+        info.extra
+            .insert("cms".to_string(), "WordPress".to_string());
     }
-    
+
     // Drupal
     if lower.contains("drupal") || response.contains("X-Drupal-") {
         info.extra.insert("cms".to_string(), "Drupal".to_string());
     }
-    
+
     // Django
     if lower.contains("django") || lower.contains("csrftoken") {
-        info.extra.insert("framework".to_string(), "Django".to_string());
+        info.extra
+            .insert("framework".to_string(), "Django".to_string());
     }
-    
+
     // Express.js
     if lower.contains("x-powered-by: express") {
-        info.extra.insert("framework".to_string(), "Express.js".to_string());
+        info.extra
+            .insert("framework".to_string(), "Express.js".to_string());
     }
-    
+
     // ASP.NET
     if lower.contains("asp.net") || lower.contains("x-aspnet-version") {
-        info.extra.insert("framework".to_string(), "ASP.NET".to_string());
+        info.extra
+            .insert("framework".to_string(), "ASP.NET".to_string());
     }
-    
+
     // PHP
     if lower.contains("x-powered-by: php") {
         info.extra.insert("language".to_string(), "PHP".to_string());
     }
-    
+
     // JSP/Java
     if lower.contains("jsessionid") || lower.contains("x-powered-by: jsp") {
-        info.extra.insert("language".to_string(), "Java/JSP".to_string());
+        info.extra
+            .insert("language".to_string(), "Java/JSP".to_string());
     }
-    
+
     // Nginx
     if lower.contains("server: nginx") {
-        info.extra.insert("webserver".to_string(), "Nginx".to_string());
+        info.extra
+            .insert("webserver".to_string(), "Nginx".to_string());
     }
-    
+
     // Apache
     if lower.contains("server: apache") {
-        info.extra.insert("webserver".to_string(), "Apache".to_string());
+        info.extra
+            .insert("webserver".to_string(), "Apache".to_string());
     }
-    
+
     // Cloudflare
     if lower.contains("cf-ray") || lower.contains("cloudflare") {
-        info.extra.insert("cdn".to_string(), "Cloudflare".to_string());
+        info.extra
+            .insert("cdn".to_string(), "Cloudflare".to_string());
     }
-    
+
     // AWS
     if lower.contains("x-amz-") {
         info.extra.insert("cloud".to_string(), "AWS".to_string());

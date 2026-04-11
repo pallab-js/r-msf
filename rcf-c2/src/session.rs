@@ -158,11 +158,7 @@ impl SessionManager {
     }
 
     /// Create a new session and return its numeric ID.
-    pub async fn create_session(
-        &self,
-        remote_addr: &str,
-        type_: SessionType,
-    ) -> u32 {
+    pub async fn create_session(&self, remote_addr: &str, type_: SessionType) -> u32 {
         let mut num_lock = self.next_num.lock().await;
         let num = *num_lock;
         *num_lock += 1;
@@ -219,9 +215,10 @@ impl SessionManager {
         if let Some(session) = sessions.get_mut(&num) {
             // Send close command if there's a sender
             if let Some(tx) = &session.command_tx
-                && let Err(e) = tx.send(SessionCommand::Close).await {
-                    tracing::warn!("Failed to send close command to session {}: {}", num, e);
-                }
+                && let Err(e) = tx.send(SessionCommand::Close).await
+            {
+                tracing::warn!("Failed to send close command to session {}: {}", num, e);
+            }
             session.close();
             Some(session.clone())
         } else {
@@ -236,9 +233,10 @@ impl SessionManager {
             if session.active {
                 // Send close command if there's a sender
                 if let Some(tx) = &session.command_tx
-                    && let Err(e) = tx.send(SessionCommand::Close).await {
-                        tracing::warn!("Failed to send close command to session {}: {}", id, e);
-                    }
+                    && let Err(e) = tx.send(SessionCommand::Close).await
+                {
+                    tracing::warn!("Failed to send close command to session {}: {}", id, e);
+                }
                 session.close();
             }
         }
@@ -248,12 +246,16 @@ impl SessionManager {
     pub async fn send_command(&self, session_num: u32, command: &str) -> anyhow::Result<()> {
         let sessions = self.sessions.read().await;
         if let Some(session) = sessions.get(&session_num)
-            && let Some(tx) = &session.command_tx {
-                tx.send(SessionCommand::Execute(command.to_string()))
-                    .await?;
-                return Ok(());
-            }
-        Err(anyhow::anyhow!("Session {} not found or has no command channel", session_num))
+            && let Some(tx) = &session.command_tx
+        {
+            tx.send(SessionCommand::Execute(command.to_string()))
+                .await?;
+            return Ok(());
+        }
+        Err(anyhow::anyhow!(
+            "Session {} not found or has no command channel",
+            session_num
+        ))
     }
 
     /// Count active sessions.

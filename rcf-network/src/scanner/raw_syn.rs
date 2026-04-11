@@ -19,33 +19,40 @@
 //! - Root/Administrator privileges
 //! - Raw socket access
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::time::{Duration, Instant};
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
-use crate::scanner::common::{PortRange, ScanResult, PortState};
+use crate::scanner::common::{PortRange, ScanResult};
 
 /// TCP flags
 mod tcp_flags {
+    #[allow(dead_code)]
     pub const FIN: u8 = 0x01;
     pub const SYN: u8 = 0x02;
     pub const RST: u8 = 0x04;
+    #[allow(dead_code)]
     pub const PSH: u8 = 0x08;
     pub const ACK: u8 = 0x10;
+    #[allow(dead_code)]
     pub const URG: u8 = 0x20;
 }
 
 /// A parsed TCP response packet.
 #[derive(Debug, Clone)]
 struct TcpResponse {
+    #[allow(dead_code)]
     src_ip: Ipv4Addr,
+    #[allow(dead_code)]
     src_port: u16,
     flags: u8,
+    #[allow(dead_code)]
     seq: u32,
+    #[allow(dead_code)]
     ack_seq: u32,
     ttl: u8,
     window_size: u16,
@@ -68,6 +75,7 @@ pub struct RawSynScanner {
     /// Source port for sending SYNs (to match responses)
     source_port: u16,
     /// Expected sequence number base
+    #[allow(dead_code)]
     seq_base: u32,
 }
 
@@ -101,6 +109,7 @@ impl RawSynScanner {
     }
 
     /// Scan a single host using raw SYN packets.
+    #[allow(dead_code)]
     pub async fn scan(
         &self,
         target_ip: Ipv4Addr,
@@ -108,6 +117,7 @@ impl RawSynScanner {
         timeout: Duration,
         concurrency: usize,
     ) -> Vec<ScanResult> {
+        let _ = concurrency; // Used by TCP connect scanner; raw sockets handle internally
         if !self.privileged {
             warn!("Raw SYN scanner requires root privileges. Falling back to connect scan.");
             return Vec::new();
@@ -123,8 +133,7 @@ impl RawSynScanner {
         );
 
         // Shared state for responses
-        let responses: Arc<Mutex<HashMap<u16, TcpResponse>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let responses: Arc<Mutex<HashMap<u16, TcpResponse>>> = Arc::new(Mutex::new(HashMap::new()));
 
         // Spawn response listener
         let listener_responses = Arc::clone(&responses);
@@ -132,21 +141,16 @@ impl RawSynScanner {
             Self::listen_for_responses(target_ip, listener_responses, timeout).await
         });
 
-        // Send SYN packets
-        let semaphore = tokio::sync::Semaphore::new(concurrency);
+        // Send SYN packets - spawn all tasks and let tokio handle scheduling
         let mut send_handles = Vec::with_capacity(total);
 
         for port in port_list {
-            let permit = semaphore.acquire().await
-                .map_err(|e| anyhow::anyhow!("Semaphore poisoned: {}", e))?;
             let src_ip = target_ip;
             let resp = Arc::clone(&responses);
             let timeout_dur = timeout;
 
             let handle = tokio::spawn(async move {
-                let result = Self::send_syn_and_check(src_ip, port, &resp, timeout_dur).await;
-                drop(permit);
-                result
+                Self::send_syn_and_check(src_ip, port, &resp, timeout_dur).await
             });
             send_handles.push(handle);
         }
@@ -171,7 +175,7 @@ impl RawSynScanner {
         target_ip: Ipv4Addr,
         port: u16,
         responses: &Arc<Mutex<HashMap<u16, TcpResponse>>>,
-        timeout: Duration,
+        _timeout: Duration,
     ) -> ScanResult {
         let start = Instant::now();
 
@@ -221,23 +225,16 @@ impl RawSynScanner {
             use std::os::unix::io::AsRawFd;
 
             // Create raw socket
-            // Safety: Requires CAP_NET_RAW (root) to create raw sockets.
-            // This is a fundamental requirement for SYN scanning and cannot be avoided.
-            #[allow(clippy::missing_safety_doc)]
-            let socket = unsafe {
-                socket2::Socket::new(
-                    socket2::Domain::IPV4,
-                    socket2::Type::RAW,
-                    Some(socket2::Protocol::from(libc::IPPROTO_TCP)),
-                )?
-            };
+            let socket = socket2::Socket::new(
+                socket2::Domain::IPV4,
+                socket2::Type::RAW,
+                Some(socket2::Protocol::from(libc::IPPROTO_TCP)),
+            )?;
 
             // Set IP_HDRINCL so we provide our own IP header
             let fd = socket.as_raw_fd();
             let incl: libc::c_int = 1;
-            // Safety: fd is a valid file descriptor from socket.as_raw_fd(),
-            // incl is a valid c_int, and IP_HDRINCL is a valid socket option.
-            // This call is required to send custom IP headers for SYN scanning.
+            // Safety: fd is a valid file descriptor, incl is valid, IP_HDRINCL is valid.
             #[allow(clippy::missing_safety_doc)]
             unsafe {
                 libc::setsockopt(
@@ -267,7 +264,8 @@ impl RawSynScanner {
             packet.extend_from_slice(&target_ip.octets()); // Dest IP
 
             // TCP header (20 bytes)
-            packet.extend_from_slice(&Self::source_port.to_be_bytes()); // Source port
+            const SOURCE_PORT: u16 = 31337;
+            packet.extend_from_slice(&SOURCE_PORT.to_be_bytes()); // Source port
             packet.extend_from_slice(&port.to_be_bytes()); // Dest port
             packet.extend_from_slice(&0xDEADBEEFu32.to_be_bytes()); // Sequence number
             packet.extend_from_slice(&0u32.to_be_bytes()); // Ack number
@@ -327,7 +325,7 @@ impl RawSynScanner {
             let fd = socket.as_raw_fd();
             let timeout_ms = timeout.as_millis() as libc::c_int;
             unsafe {
-                let mut tv = libc::timeval {
+                let tv = libc::timeval {
                     tv_sec: (timeout_ms / 1000) as _,
                     tv_usec: ((timeout_ms % 1000) * 1000) as _,
                 };
@@ -343,7 +341,14 @@ impl RawSynScanner {
             let mut buf = [0u8; 1500]; // MTU-sized buffer
 
             loop {
-                let n = match socket.recv(&mut buf) {
+                // recv expects &mut [MaybeUninit<u8>], so we need to convert
+                let uninit_buf: &mut [std::mem::MaybeUninit<u8>] = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        buf.as_mut_ptr() as *mut std::mem::MaybeUninit<u8>,
+                        buf.len(),
+                    )
+                };
+                let n = match socket.recv(uninit_buf) {
                     Ok(n) => n,
                     Err(_) => break, // Timeout or error
                 };
@@ -352,13 +357,16 @@ impl RawSynScanner {
                     continue; // Too small for IP + TCP headers
                 }
 
+                // Safety: recv wrote n bytes, so first n bytes are initialized
+                let buf_init = unsafe { std::slice::from_raw_parts(buf.as_ptr(), n) };
+
                 // Parse IP header
-                let ihl = (buf[0] & 0x0F) as usize * 4;
-                if buf[9] as i32 != libc::IPPROTO_TCP || ihl < 20 {
+                let ihl = (buf_init[0] & 0x0F) as usize * 4;
+                if buf_init[9] as i32 != libc::IPPROTO_TCP || ihl < 20 {
                     continue;
                 }
 
-                let src_ip = Ipv4Addr::new(buf[12], buf[13], buf[14], buf[15]);
+                let src_ip = Ipv4Addr::new(buf_init[12], buf_init[13], buf_init[14], buf_init[15]);
                 if src_ip != target_ip {
                     continue;
                 }
@@ -369,23 +377,25 @@ impl RawSynScanner {
                     continue;
                 }
 
-                let src_port = u16::from_be_bytes([buf[tcp_start], buf[tcp_start + 1]]);
-                let dst_port = u16::from_be_bytes([buf[tcp_start + 2], buf[tcp_start + 3]]);
-                let flags = buf[tcp_start + 13];
+                let _src_port = u16::from_be_bytes([buf_init[tcp_start], buf_init[tcp_start + 1]]);
+                let dst_port =
+                    u16::from_be_bytes([buf_init[tcp_start + 2], buf_init[tcp_start + 3]]);
+                let flags = buf_init[tcp_start + 13];
                 let seq = u32::from_be_bytes([
-                    buf[tcp_start + 4],
-                    buf[tcp_start + 5],
-                    buf[tcp_start + 6],
-                    buf[tcp_start + 7],
+                    buf_init[tcp_start + 4],
+                    buf_init[tcp_start + 5],
+                    buf_init[tcp_start + 6],
+                    buf_init[tcp_start + 7],
                 ]);
                 let ack_seq = u32::from_be_bytes([
-                    buf[tcp_start + 8],
-                    buf[tcp_start + 9],
-                    buf[tcp_start + 10],
-                    buf[tcp_start + 11],
+                    buf_init[tcp_start + 8],
+                    buf_init[tcp_start + 9],
+                    buf_init[tcp_start + 10],
+                    buf_init[tcp_start + 11],
                 ]);
-                let window = u16::from_be_bytes([buf[tcp_start + 14], buf[tcp_start + 15]]);
-                let ttl = buf[8]; // IP TTL
+                let window =
+                    u16::from_be_bytes([buf_init[tcp_start + 14], buf_init[tcp_start + 15]]);
+                let ttl = buf_init[8]; // IP TTL
 
                 let response = TcpResponse {
                     src_ip,
@@ -398,7 +408,8 @@ impl RawSynScanner {
                 };
 
                 // Only store responses for ports we scanned
-                if response.src_port == Self::source_port {
+                const SOURCE_PORT: u16 = 31337;
+                if response.src_port == SOURCE_PORT {
                     let mut map = responses.lock().await;
                     map.insert(dst_port, response);
                 }
@@ -447,7 +458,7 @@ fn guess_os_from_tcp(ttl: u8, window_size: u16) -> Option<String> {
         (64, 5840) => Some("Linux (older)".to_string()),
         (128, 65535) => Some("Windows 10/11".to_string()),
         (128, 8192) => Some("Windows 7/8".to_string()),
-        (64, 65535) => Some("FreeBSD/macOS".to_string()),
+        (64, ..) => Some("FreeBSD/macOS".to_string()),
         (255, _) => Some("OpenBSD/FreeBSD".to_string()),
         (32, _) => Some("Windows 9x/ME".to_string()),
         _ if ttl <= 64 => Some(format!("Linux/Unix (TTL={})", ttl)),

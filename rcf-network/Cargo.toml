@@ -8,7 +8,7 @@ description = "Async networking primitives for scanning and protocol handling"
 rcf-core = { path = "../rcf-core" }
 rcf-modules = { path = "../rcf-modules" }
 tokio = { workspace = true }
-socket2 = { workspace = true }
+socket2 = { workspace = true, features = ["all"] }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

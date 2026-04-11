@@ -7,9 +7,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
-use serde::{Deserialize, Serialize};
 
 /// Status of a background job.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -146,20 +146,26 @@ impl JobManager {
 
     /// List all jobs.
     pub async fn list_jobs(&self) -> Vec<JobInfo> {
-        self.jobs.read().await.values().map(JobInfo::from_job).collect()
+        self.jobs
+            .read()
+            .await
+            .values()
+            .map(JobInfo::from_job)
+            .collect()
     }
 
     /// Stop a running job.
     pub async fn stop_job(&self, id: u32) -> bool {
         let mut jobs = self.jobs.write().await;
         if let Some(job) = jobs.get_mut(&id)
-            && job.status == JobStatus::Running {
-                job.stop();
-                if let Some(handle) = job.handle.take() {
-                    handle.abort();
-                }
-                return true;
+            && job.status == JobStatus::Running
+        {
+            job.stop();
+            if let Some(handle) = job.handle.take() {
+                handle.abort();
             }
+            return true;
+        }
         false
     }
 

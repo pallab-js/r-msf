@@ -9,11 +9,11 @@
 //! - Vulnerability tracking
 //! - Export to JSON, CSV, XML
 
-pub mod schema;
-pub mod models;
 pub mod connection;
 pub mod export;
+pub mod models;
+pub mod schema;
 
 pub use connection::RcfDatabase;
-pub use models::*;
 pub use export::ExportFormat;
+pub use models::*;

@@ -3,7 +3,7 @@
 [![CI](https://github.com/rcf/rcf/actions/workflows/ci.yml/badge.svg)](https://github.com/rcf/rcf/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org)
-[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey.svg)](https://github.com/rcf/rcf)
+[![Platform](https://img.shields.io/badge/platform-linux%20x86__64-blue.svg)](https://github.com/rcf/rcf)
 
 > **Fast. Safe. Modular. Rust.**
 
@@ -38,7 +38,7 @@ rcf/
 ├── rcf-modules/    # Module registry and plugin system
 ├── rcf-labs/       # 56+ exploit/scanner modules for HTB/THM/OffSec
 ├── rcf-network/    # TCP scanners, protocol handlers
-├── rcf-payload/    # Payload generator, encoders, PE builder
+├── rcf-payload/    # Payload generator, encoders, shellcode
 ├── rcf-db/         # SQLite + Diesel with credential hashing
 └── rcf-c2/         # C2 server with sandboxed command execution
 ```
@@ -63,9 +63,9 @@ rcf/
 - **Meterpreter-style commands** — Shell, upload, download, process listing (with sandboxing)
 
 ### Payload Generation
-- **Shellcode templates** — linux/x64, linux/x86, macos/x64
+- **Shellcode templates** — linux/x64, linux/x86
 - **Encoders** — XOR (single/multi-byte), polymorphic engine
-- **Output formats** — C, Python, PowerShell, Ruby, JavaScript, hex, base64, raw, PE
+- **Output formats** — C, Python, hex, base64, raw
 - **Secure execution** — Uses `tempfile` for unpredictable filenames
 
 ### Intelligence & Reporting
@@ -115,7 +115,7 @@ cargo build --release -p rcf-cli --no-default-features
 
 | Command | Description |
 |---------|-------------|
-| `rcf` | Start interactive console |
+| `rcf` | Start interactive console (CLI-only) |
 | `rcf scan -t <target>` | Port scan (supports CIDR, ranges) |
 | `rcf search <keyword>` | Search modules |
 | `rcf info <module>` | Show module details |
@@ -168,10 +168,13 @@ cargo clippy --workspace -- -D warnings
 # Format
 cargo fmt
 
-# Cross-compile
-make linux-x64   # Linux x86_64
-make macos-arm64 # macOS Apple Silicon
-make windows-x64 # Windows (requires MinGW)
+# Build release
+cargo build --release -p rcf-cli
+
+# Quick commands (see Makefile)
+make run          # Build and start console
+make scan         # Quick scan localhost
+make venom        # Generate test payload
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines.

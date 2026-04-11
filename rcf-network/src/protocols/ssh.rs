@@ -28,11 +28,7 @@ impl SshFingerprinter {
         debug!("Fingerprinting ssh://{}:{}", host, port);
 
         let addr = format!("{}:{}", host, port);
-        let result = timeout(
-            Duration::from_secs(5),
-            TcpStream::connect(&addr),
-        )
-        .await;
+        let result = timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await;
 
         let stream = match result {
             Ok(Ok(s)) => s,
@@ -58,7 +54,7 @@ impl SshFingerprinter {
         // Parse SSH version from banner
         // Format: SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1
         let mut info = ServiceInfo::new("ssh");
-        
+
         if let Some(version) = parse_ssh_version(banner) {
             info.version = Some(version.clone());
             info = info.with_extra("banner", banner);
@@ -102,12 +98,12 @@ impl Default for SshFingerprinter {
 fn parse_ssh_version(banner: &str) -> Option<String> {
     // Remove any trailing whitespace/CR
     let banner = banner.trim();
-    
+
     // Should start with SSH-
     if !banner.starts_with("SSH-") {
         return None;
     }
-    
+
     // Extract the software part after SSH-X.Y-
     if let Some(dash_pos) = banner[4..].find('-') {
         let software = &banner[4 + dash_pos + 1..];

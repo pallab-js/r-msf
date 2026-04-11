@@ -33,12 +33,7 @@ impl SmbFingerprinter {
         debug!("Fingerprinting smb://{}:{}", host, port);
 
         let addr = format!("{}:{}", host, port);
-        let mut stream = match timeout(
-            Duration::from_secs(5),
-            TcpStream::connect(&addr),
-        )
-        .await
-        {
+        let mut stream = match timeout(Duration::from_secs(5), TcpStream::connect(&addr)).await {
             Ok(Ok(s)) => s,
             _ => {
                 debug!("Failed to connect to {}:{} for SMB", host, port);
@@ -84,7 +79,6 @@ fn build_smb_negotiate() -> Vec<u8> {
     vec![
         // NetBIOS Session Service header
         0x00, 0x00, 0x00, 0x4a, // Session message, length = 74
-
         // SMB2 header
         0xfe, 0x53, 0x4d, 0x42, // Protocol ID: "\xfeSMB"
         0x40, 0x00, // StructureSize: 64
@@ -100,7 +94,6 @@ fn build_smb_negotiate() -> Vec<u8> {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // TreeId
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // SessionId
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Signature
-
         // SMB2 Negotiate request body
         0x24, 0x00, // StructureSize: 36
         0x08, 0x00, // DialectCount: 8
@@ -111,7 +104,6 @@ fn build_smb_negotiate() -> Vec<u8> {
         0x00, 0x00, 0x00, 0x00, // NegotiateContextOffset
         0x00, 0x00, // NegotiateContextCount
         0x00, 0x00, // Reserved2
-
         // Supported dialects
         0x02, 0x02, // SMB 2.0.2
         0x10, 0x02, // SMB 2.1
@@ -133,9 +125,11 @@ fn parse_smb_response(data: &[u8], host: &str) -> Option<ServiceInfo> {
     // Check SMB2 signature
     if &data[4..8] != b"\xfeSMB" {
         // Might be SMBv1 or NetBIOS only
-        return Some(ServiceInfo::new("smb")
-            .with_extra("target", host)
-            .with_extra("note", "likely SMBv1"));
+        return Some(
+            ServiceInfo::new("smb")
+                .with_extra("target", host)
+                .with_extra("note", "likely SMBv1"),
+        );
     }
 
     let mut info = ServiceInfo::new("smb").with_extra("target", host);

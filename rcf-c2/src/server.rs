@@ -1,17 +1,17 @@
 //! C2 Server — TCP listener for incoming agent connections.
 
+use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::VecDeque;
 
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tokio::sync::mpsc;
+use tracing::{error, info, warn};
 
-use crate::session::{SessionManager, SessionType, SessionCommand};
 use crate::handler::SessionHandler;
+use crate::session::{SessionCommand, SessionManager, SessionType};
 
 /// Sliding window rate limiter — tracks connections in a time window.
 struct SlidingWindowRateLimiter {
@@ -143,11 +143,12 @@ impl C2Server {
 
         // Verify PSK if configured
         if let Some(expected_psk) = psk
-            && provided_psk != expected_psk {
-                warn!("PSK mismatch from {}: invalid key provided", peer_addr);
-                socket.write_all(b"AUTH_FAILED\n").await?;
-                anyhow::bail!("PSK mismatch");
-            }
+            && provided_psk != expected_psk
+        {
+            warn!("PSK mismatch from {}: invalid key provided", peer_addr);
+            socket.write_all(b"AUTH_FAILED\n").await?;
+            anyhow::bail!("PSK mismatch");
+        }
 
         info!("Agent {} authenticated successfully", peer_addr);
         socket.write_all(b"RCF_AUTH_SUCCESS\n").await?;
@@ -173,10 +174,7 @@ impl C2Server {
             running: Arc::new(tokio::sync::Notify::new()),
             shutdown_triggered: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             // Sliding window: 100 connections per 60 seconds
-            rate_limiter: SlidingWindowRateLimiter::new(
-                Duration::from_secs(60),
-                100,
-            ),
+            rate_limiter: SlidingWindowRateLimiter::new(Duration::from_secs(60), 100),
         }
     }
 
@@ -192,18 +190,23 @@ impl C2Server {
         );
 
         // Start control server for console interaction
-        let control_port = self.config.control_port.unwrap_or(self.config.listen_port + 1);
+        let control_port = self
+            .config
+            .control_port
+            .unwrap_or(self.config.listen_port + 1);
         let sessions_clone = Arc::clone(&self.sessions);
         let control_addr = format!("{}:{}", self.config.listen_addr, control_port);
         let listen_addr = self.config.listen_addr.clone();
-        info!("C2 control server listening on {} (for console interaction)", control_addr);
+        info!(
+            "C2 control server listening on {} (for console interaction)",
+            control_addr
+        );
 
         let _control_handle = tokio::spawn(async move {
-            if let Err(e) = crate::control::start_control_server(
-                &listen_addr,
-                control_port,
-                sessions_clone,
-            ).await {
+            if let Err(e) =
+                crate::control::start_control_server(&listen_addr, control_port, sessions_clone)
+                    .await
+            {
                 error!("Control server error: {}", e);
             }
         });
@@ -272,28 +275,31 @@ impl C2Server {
         let active_count = sessions.active_count().await;
         if active_count > 0 {
             info!("Terminating {} active sessions gracefully...", active_count);
-            
+
             // Kill all sessions
             sessions.kill_all().await;
-            
+
             // Wait for sessions to clean up (with timeout)
             let deadline = tokio::time::Instant::now() + timeout;
             while sessions.active_count().await > 0 && tokio::time::Instant::now() < deadline {
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            
+
             let remaining = sessions.active_count().await;
             if remaining > 0 {
                 warn!("{} sessions did not terminate gracefully", remaining);
             }
         }
-        
+
         info!("C2 server shutdown complete");
     }
 
     /// Stop the C2 server with graceful shutdown.
     pub fn stop(&self) {
-        if !self.shutdown_triggered.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        if !self
+            .shutdown_triggered
+            .swap(true, std::sync::atomic::Ordering::Relaxed)
+        {
             info!("C2 server stop requested");
             self.running.notify_one();
         }

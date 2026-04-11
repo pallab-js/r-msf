@@ -129,10 +129,7 @@ impl ModuleManager {
             ));
 
             for info in modules {
-                lines.push(format!(
-                    "    {:<45} {}",
-                    info.name, info.description
-                ));
+                lines.push(format!("    {:<45} {}", info.name, info.description));
             }
             lines.push(String::new());
         }

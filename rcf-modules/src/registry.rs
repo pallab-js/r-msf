@@ -53,7 +53,9 @@ impl ModuleRegistry {
                 info.name.to_lowercase().contains(&keyword_lower)
                     || info.display_name.to_lowercase().contains(&keyword_lower)
                     || info.description.to_lowercase().contains(&keyword_lower)
-                    || format!("{}", info.category).to_lowercase().contains(&keyword_lower)
+                    || format!("{}", info.category)
+                        .to_lowercase()
+                        .contains(&keyword_lower)
             })
             .collect()
     }

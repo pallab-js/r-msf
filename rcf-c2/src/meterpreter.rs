@@ -232,7 +232,10 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
         },
         MeterpreterCommand::Ps => {
             // Stub - would enumerate processes on target
-            MeterpreterResponse::success("ps", "Process listing not available in server mode.\n[*] This would enumerate processes on the compromised host in a real agent.")
+            MeterpreterResponse::success(
+                "ps",
+                "Process listing not available in server mode.\n[*] This would enumerate processes on the compromised host in a real agent.",
+            )
         }
         MeterpreterCommand::Exec { command } => {
             // WARNING: This executes commands on the LOCAL machine (C2 server operator's host).
@@ -332,10 +335,34 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                 // Additional safety: block commands with suspicious patterns
                 let cmd_lower = trimmed.to_lowercase();
                 let suspicious_patterns = [
-                    "sudo ", "su ", "chmod ", "chown ", "chgrp ", ">/dev/", "2>/dev/",
-                    ">>/", "| /", "& /", "eval ", "exec ", "source ", ".", "$(", "`", "|sh",
-                    "|bash", "mkfs", "dd ", "fdisk", "parted", "cryptsetup",
-                    "curl ", "wget ", "nc ", "ncat ", "telnet ",
+                    "sudo ",
+                    "su ",
+                    "chmod ",
+                    "chown ",
+                    "chgrp ",
+                    ">/dev/",
+                    "2>/dev/",
+                    ">>/",
+                    "| /",
+                    "& /",
+                    "eval ",
+                    "exec ",
+                    "source ",
+                    ".",
+                    "$(",
+                    "`",
+                    "|sh",
+                    "|bash",
+                    "mkfs",
+                    "dd ",
+                    "fdisk",
+                    "parted",
+                    "cryptsetup",
+                    "curl ",
+                    "wget ",
+                    "nc ",
+                    "ncat ",
+                    "telnet ",
                 ];
 
                 for pattern in &suspicious_patterns {
@@ -348,10 +375,12 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
                 }
 
                 // For documentation: note that real C2 should execute on agents, not locally
-                MeterpreterResponse::success("exec", 
+                MeterpreterResponse::success(
+                    "exec",
                     "[NOTE] Command execution on local machine is disabled for security.\n\
                      In production C2, commands execute on remote agents, not the operator's host.\n\
-                     Use 'agent_exec <session> <command>' to execute on connected agents.")
+                     Use 'agent_exec <session> <command>' to execute on connected agents.",
+                )
             }
             #[cfg(not(unix))]
             {

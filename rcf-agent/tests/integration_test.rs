@@ -2,8 +2,8 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -14,7 +14,7 @@ fn run_mock_c2_server(port: u16, command: &str, running: Arc<AtomicBool>) -> Str
 
     let mut result = String::new();
 
-    if let Ok((mut stream, _)) = listener.accept() {
+    if let Ok((stream, _)) = listener.accept() {
         stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
         stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
 
@@ -77,16 +77,21 @@ fn test_agent_connects_and_authenticates() {
     let running_clone = running.clone();
 
     // Start mock C2 server
-    let handle = thread::spawn(move || {
-        run_mock_c2_server(port, "echo hello", running_clone)
-    });
+    let handle = thread::spawn(move || run_mock_c2_server(port, "echo hello", running_clone));
 
     // Give server time to start
     thread::sleep(Duration::from_millis(200));
 
-    // Start agent
+    // Start agent with PSK
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_rcf-agent"))
-        .args(["--host", "127.0.0.1", "--port", &port.to_string()])
+        .args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &port.to_string(),
+            "--psk",
+            "test_psk",
+        ])
         .output()
         .expect("Failed to start agent");
 
@@ -96,10 +101,22 @@ fn test_agent_connects_and_authenticates() {
     let server_result = handle.join().unwrap();
 
     // Verify the protocol
-    assert!(server_result.contains("GREETING: RCF_AGENT_V1:"), "Agent should send greeting");
-    assert!(server_result.contains("MARKER: RCF_SYSINFO"), "Agent should send sysinfo marker");
-    assert!(server_result.contains("SYSINFO:"), "Agent should send sysinfo JSON");
-    assert!(server_result.contains("OUT_MARKER: RCF_OUTPUT"), "Agent should send output block");
+    assert!(
+        server_result.contains("GREETING: RCF_AGENT_V1:test_psk"),
+        "Agent should send greeting with PSK"
+    );
+    assert!(
+        server_result.contains("MARKER: RCF_SYSINFO"),
+        "Agent should send sysinfo marker"
+    );
+    assert!(
+        server_result.contains("SYSINFO:"),
+        "Agent should send sysinfo JSON"
+    );
+    assert!(
+        server_result.contains("OUT_MARKER: RCF_OUTPUT"),
+        "Agent should send output block"
+    );
 
     // Verify agent exited cleanly
     assert!(output.status.success() || stderr.contains("Disconnected"));
@@ -111,14 +128,19 @@ fn test_agent_builtin_commands() {
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
 
-    let handle = thread::spawn(move || {
-        run_mock_c2_server(port, "sysinfo", running_clone)
-    });
+    let handle = thread::spawn(move || run_mock_c2_server(port, "sysinfo", running_clone));
 
     thread::sleep(Duration::from_millis(200));
 
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_rcf-agent"))
-        .args(["--host", "127.0.0.1", "--port", &port.to_string()])
+        .args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &port.to_string(),
+            "--psk",
+            "test_psk",
+        ])
         .output()
         .expect("Failed to start agent");
 
@@ -129,12 +151,23 @@ fn test_agent_builtin_commands() {
 #[test]
 fn test_agent_fails_gracefully_on_no_server() {
     let output = std::process::Command::new(env!("CARGO_BIN_EXE_rcf-agent"))
-        .args(["--host", "127.0.0.1", "--port", "59999"])
+        .args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "59999",
+            "--psk",
+            "test_psk",
+        ])
         .output()
         .expect("Failed to start agent");
 
-    // Should fail with non-zero exit code
+    // Should fail with non-zero exit code (agent retries then fails when no server)
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Failed to connect") || stderr.contains("Retry failed"));
+    assert!(
+        stderr.contains("Failed to connect")
+            || stderr.contains("Retry failed")
+            || stderr.contains("Retry failed")
+    );
 }

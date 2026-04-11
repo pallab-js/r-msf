@@ -117,20 +117,6 @@ impl Context {
         self.get("STRICT_TLS").map(|s| s == "true").unwrap_or(false)
     }
 
-    /// Build a reqwest Client with the appropriate TLS configuration
-    /// based on the current context's strict_tls setting.
-    ///
-    /// # Errors
-    /// Returns an error if the HTTP client cannot be built.
-    #[cfg(feature = "reqwest")]
-    pub fn http_client(&self) -> anyhow::Result<reqwest::Client> {
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(!self.is_strict_tls())
-            .build()
-            .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))?;
-        Ok(client)
-    }
-
     /// Unset (remove) an option.
     pub fn unset(&mut self, key: &str) {
         self.options.remove(&key.to_uppercase());
@@ -138,7 +124,11 @@ impl Context {
 
     /// Get all options as a sorted list.
     pub fn list_options(&self) -> Vec<(String, String)> {
-        let mut items: Vec<_> = self.options.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let mut items: Vec<_> = self
+            .options
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
         items.sort_by(|a, b| a.0.cmp(&b.0));
         items
     }
@@ -179,5 +169,20 @@ impl SharedContext {
 
     pub async fn write(&self) -> tokio::sync::RwLockWriteGuard<'_, Context> {
         self.inner.write().await
+    }
+}
+
+/// Global shared HTTP client for reuse across modules.
+/// Uses OnceLock for lazy initialization with thread-safe access.
+#[cfg(feature = "reqwest")]
+impl Context {
+    /// Get a new HTTP client for making HTTP requests.
+    /// Uses the current context's TLS settings.
+    pub fn http_client(&self) -> anyhow::Result<reqwest::Client> {
+        reqwest::Client::builder()
+            .danger_accept_invalid_certs(!self.is_strict_tls())
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))
     }
 }
