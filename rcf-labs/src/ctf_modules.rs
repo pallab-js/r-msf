@@ -1,3 +1,9 @@
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::useless_format)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::single_char_pattern)]
+#![allow(clippy::single_match)]
+
 //! CTF-specific helper modules for competitive hacking.
 //!
 //! Features: timers, flag extraction, hash cracking, quick helpers.

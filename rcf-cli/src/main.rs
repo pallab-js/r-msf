@@ -1,3 +1,6 @@
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::collapsible_if)]
+
 //! CLI entry point for the Rust Cybersecurity Framework.
 
 use clap::{Parser, Subcommand};

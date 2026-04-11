@@ -1,3 +1,9 @@
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::useless_format)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::single_char_pattern)]
+
 //! Anonymity and evasion system for RCF.
 //!
 //! Provides comprehensive anonymity features for:
@@ -128,19 +134,14 @@ impl AnonymityLevel {
 // ─── Proxy Configuration ────────────────────────────────────────────────────
 
 /// Supported proxy protocols.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ProxyProtocol {
+    #[default]
     Http,
     Socks5,
     Socks4,
     Ssh,
-}
-
-impl Default for ProxyProtocol {
-    fn default() -> Self {
-        Self::Http
-    }
 }
 
 /// Proxy server configuration.
@@ -317,14 +318,15 @@ pub fn detect_waf(headers: &[(String, String)]) -> WafDetection {
             }
         }
 
-        if key == "server" && value_lower.contains("unknown") && !detection.detected {
-            if let Some(pos) = value_lower.find("nginx") {
-                if pos > 0 {
-                    detection.detected = true;
-                    detection.waf_name = Some("nginx".to_string());
-                    detection.confidence = 0.3;
-                }
-            }
+        if key == "server"
+            && value_lower.contains("unknown")
+            && !detection.detected
+            && value_lower.find("nginx").is_some()
+            && value_lower.find("nginx").unwrap() > 0
+        {
+            detection.detected = true;
+            detection.waf_name = Some("nginx".to_string());
+            detection.confidence = 0.3;
         }
 
         if key == "x-backend" || key == "x-cdn" || key == "x-served-by" {
