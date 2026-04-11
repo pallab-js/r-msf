@@ -5,9 +5,9 @@
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-linux%20x86__64-blue.svg)](https://github.com/rcf/rcf)
 
-> **Fast. Safe. Modular. Rust.**
+> **Fast. Memory-Safe. Linux-First.**
 
-**RCF (Rust Cybersecurity Framework)** is a modern, async-first cybersecurity framework built for speed, memory safety, and modularity. Compiling to a single ~4.7MB binary, it serves as a robust alternative to legacy tools, providing 56+ modules for authorized security testing, exploitation, and post-exploitation.
+**RCF (Rust Cybersecurity Framework)** is a lightweight, high-performance penetration testing framework written entirely in Rust, purpose-built for Linux security assessments. With 60+ pre-built modules for network scanning, web exploitation, and post-exploitation — optimized for HackTheBox, TryHackMe, and Metasploitable labs.
 
 ## ⚡ Quick Start
 
@@ -36,7 +36,7 @@ rcf/
 ├── rcf-cli/        # CLI entry point (clap), reports, automation
 ├── rcf-console/    # Interactive REPL with tab completion
 ├── rcf-modules/    # Module registry and plugin system
-├── rcf-labs/       # 56+ exploit/scanner modules for HTB/THM/OffSec
+├── rcf-labs/       # 60+ exploit/scanner modules for HTB/THM/Metasploitable
 ├── rcf-network/    # TCP scanners, protocol handlers
 ├── rcf-payload/    # Payload generator, encoders, shellcode
 ├── rcf-db/         # SQLite + Diesel with credential hashing
@@ -52,15 +52,17 @@ rcf/
 - **Auth brute force** — SSH, FTP, HTTP, SNMP, MySQL, PostgreSQL
 
 ### Exploitation
-- **Real protocol implementations** — BlueKeep (RDP), EternalBlue (SMBv1), ProxyShell
 - **Web exploits** — Log4Shell, SQLi, XSS, SSRF, path traversal, SSTI, deserialization
+- **Apache Struts RCE** — CVE-2017-9805, CVE-2018-11776
+- **PHP CGI RCE** — CVE-2012-1823 argument injection
 - **Service exploits** — Redis, Tomcat, Jenkins, WordPress, Elasticsearch, Docker API
-- **Windows exploitation** — WinRM/PSRemoting, Kerberoasting, AS-REP Roasting
+- **Lab favorites** — Metasploitable 2/3, THM/HTB common vulnerabilities
 
 ### Post-Exploitation
-- **Linux enumeration** — SUID binaries, cron jobs, writable files, sudo misconfigurations
-- **Windows enumeration** — Token privileges, registry keys, credential harvesting
-- **Meterpreter-style commands** — Shell, upload, download, process listing (with sandboxing)
+- **SUID escalation** — GTFOBins-powered privilege escalation checker
+- **Linux enumeration** — SUID binaries, cron jobs, writable files, sudo misconfigs
+- **Web shell generator** — PHP, ASP, JSP shell templates
+- **Reverse shell listener** — Multi-shell-type listener with PTY upgrade
 
 ### Payload Generation
 - **Shellcode templates** — linux/x64, linux/x86
