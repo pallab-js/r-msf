@@ -56,7 +56,7 @@ rand = "0.9"
 getrandom = "0.2"
 
 # Networking (Phase 2)
-reqwest = { version = "0.12", features = ["rustls-tls"] }
+reqwest = { version = "0.13", features = ["rustls-tls"] }
 socket2 = "0.5"
 
 # SSH/SCP

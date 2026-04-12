@@ -13,7 +13,7 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 colored = { workspace = true }
-reqwest = { version = "0.12", features = ["rustls-tls", "blocking", "multipart", "json"] }
+reqwest = { version = "0.13", features = ["rustls-tls", "blocking", "multipart", "json"] }
 futures = "0.3"
 urlencoding = "2"
 regex = "1"

@@ -19,4 +19,4 @@ strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 regex = "1"
 rand = "0.9"
-reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }
+reqwest = { version = "0.13", features = ["rustls-tls"], optional = true }
