@@ -72,7 +72,7 @@ jobs:
           ./target/release/rcf --help
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rcf-linux-x86_64
           path: target/release/rcf
