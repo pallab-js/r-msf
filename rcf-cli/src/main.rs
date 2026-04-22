@@ -200,6 +200,13 @@ enum Commands {
         aggressive: bool,
     },
 
+    /// CTF operations (flag tracking, workspace init)
+    Ctf {
+        /// CTF command
+        #[command(subcommand)]
+        command: CtfCommands,
+    },
+
     /// Anonymity configuration and operations
     Anon {
         /// Configure anonymity level
@@ -249,6 +256,46 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum CtfCommands {
+    /// Submit a flag
+    Flag {
+        /// The flag string
+        #[arg(short, long)]
+        flag: String,
+
+        /// Associated machine name
+        #[arg(short, long)]
+        machine: Option<String>,
+    },
+    /// List captured flags
+    List,
+    /// Export flags to file
+    Export {
+        /// Output file
+        #[arg(short, long)]
+        output: String,
+
+        /// Export format
+        #[arg(short, long, default_value = "json")]
+        format: String,
+    },
+    /// Initialize CTF workspace
+    Init {
+        /// Platform (htb, thm, lab)
+        #[arg(short, long, default_value = "htb")]
+        platform: String,
+
+        /// Machine name
+        #[arg(short, long)]
+        name: String,
+
+        /// Target IP
+        #[arg(short = 't', long)]
+        ip: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 #[cfg(feature = "db")]
 enum DbCommands {
     /// Show database statistics
@@ -291,7 +338,7 @@ enum C2Commands {
 
 #[derive(Subcommand)]
 enum ReportCommands {
-    /// Generate HTML report from database
+    /// Generate report from database
     Generate {
         /// Database file path
         #[arg(short, long)]
@@ -299,6 +346,9 @@ enum ReportCommands {
         /// Output file path
         #[arg(short, long)]
         output: String,
+        /// Output format: html, json, md
+        #[arg(short, long, default_value = "html")]
+        format: String,
     },
     /// Auto-generate report from current scan findings
     Auto {
@@ -308,6 +358,9 @@ enum ReportCommands {
         /// Output file path
         #[arg(short, long, default_value = "report.html")]
         output: String,
+        /// Output format: html, json, md
+        #[arg(short, long)]
+        format: Option<String>,
     },
 }
 
@@ -475,15 +528,27 @@ async fn main() -> anyhow::Result<()> {
 
         Some(Commands::Report { command }) => {
             match command {
-                ReportCommands::Generate { db, output } => {
-                    run_report(&ReportCommands::Generate { db, output })?;
+                ReportCommands::Generate { db, output, format } => {
+                    run_report(&ReportCommands::Generate {
+                        db: db.clone(),
+                        output: output.clone(),
+                        format: format.clone(),
+                    })?;
                 }
-                ReportCommands::Auto { target, output } => {
+                ReportCommands::Auto {
+                    target,
+                    output,
+                    format,
+                } => {
+                    let out_format = format.as_deref().unwrap_or("html");
                     if let Some(t) = target {
                         run_auto(&t, Some(&output), false).await?;
-                    } else {
-                        run_report(&ReportCommands::Generate { db: None, output })?;
                     }
+                    run_report(&ReportCommands::Generate {
+                        db: None,
+                        output: output.clone(),
+                        format: out_format.to_string(),
+                    })?;
                 }
             }
             return Ok(());
@@ -526,6 +591,11 @@ async fn main() -> anyhow::Result<()> {
                 import.as_deref(),
             )
             .await?;
+            return Ok(());
+        }
+
+        Some(Commands::Ctf { command }) => {
+            run_ctf(&command)?;
             return Ok(());
         }
 
@@ -685,6 +755,7 @@ async fn run_venom_stage_server(
         polymorphic: false,
         nop_sled_size: None,
         bad_chars: vec![0x00],
+        allow_private_lhost: false,
     };
 
     let generator = PayloadGenerator::new();
@@ -758,6 +829,18 @@ async fn run_venom(
         PayloadType::ReverseTcp
     });
 
+    // Auto-detect LHOST from VPN interface
+    let mut resolved_lhost = lhost.to_string();
+    if lhost.eq_ignore_ascii_case("auto") || lhost.is_empty() {
+        if let Some(tun_ip) = detect_tun0_ip() {
+            eprintln!("[!] Auto-detected VPN interface IP: {}", tun_ip);
+            resolved_lhost = tun_ip;
+        } else if lhost.is_empty() {
+            eprintln!("[!] No LHOST specified and no tun0 interface found.");
+            eprintln!("    Use --lhost with explicit IP or set RHOSTS env var.");
+        }
+    }
+
     // Parse platform and arch from env or defaults
     let platform = std::env::var("RCF_PLATFORM")
         .ok()
@@ -771,7 +854,7 @@ async fn run_venom(
 
     println!("  Type:      {}", ptype);
     println!("  Platform:  {}/{}", platform, arch);
-    println!("  LHOST:     {}", lhost);
+    println!("  LHOST:     {}", resolved_lhost);
     println!("  LPORT:     {}", lport);
     println!("  Format:    {}", format);
     if let Some(enc) = encoder {
@@ -802,7 +885,7 @@ async fn run_venom(
         payload_type: ptype,
         platform: platform.clone(),
         arch: arch.clone(),
-        lhost: lhost.to_string(),
+        lhost: resolved_lhost.clone(),
         lport,
         rhost: None,
         rport: None,
@@ -813,6 +896,7 @@ async fn run_venom(
         polymorphic: is_polymorphic,
         nop_sled_size: None,
         bad_chars: vec![0x00],
+        allow_private_lhost: false,
     };
 
     // Generate
@@ -1291,14 +1375,21 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
         Ok(path.to_string())
     }
 
-    let (db_path, output) = match command {
-        ReportCommands::Generate { db, output } => (
+    let (db_path, output, report_format) = match command {
+        ReportCommands::Generate { db, output, format } => (
             db.clone().unwrap_or_else(|| "rcf.db".to_string()),
             validate_output_path(output)?,
+            format.clone(),
         ),
-        ReportCommands::Auto { target: _, output } => {
-            ("rcf.db".to_string(), validate_output_path(output)?)
-        }
+        ReportCommands::Auto {
+            target: _,
+            output,
+            format,
+        } => (
+            "rcf.db".to_string(),
+            validate_output_path(output)?,
+            format.clone().unwrap_or_else(|| "html".to_string()),
+        ),
     };
 
     let mut db = RcfDatabase::new(&db_path)?;
@@ -1345,6 +1436,17 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
         overall_risk, stats.vulnerabilities, stats.hosts, stats.credentials
     );
     html = html.replace("{{EXEC_SUMMARY}}", &exec_summary);
+
+    // For JSON/MD formats, skip HTML-specific processing
+    let findings = if report_format.as_str() == "json" || report_format.as_str() == "md" {
+        vulns
+            .iter()
+            .map(|v| format!("- {} [{}] on {}", v.name, v.severity, v.host_id))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        String::new()
+    };
 
     // Hosts with service counts
     let mut hosts_rows = String::new();
@@ -1415,7 +1517,39 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
     }
     html = html.replace("{{REMEDIATION}}", &remediation);
 
-    std::fs::write(&output, html)?;
+    match report_format.as_str() {
+        "json" => {
+            let json = serde_json::json!({
+                "title": format!("Security Assessment - {}", chrono::Utc::now().format("%Y-%m-%d")),
+                "stats": {
+                    "hosts": stats.hosts,
+                    "services": stats.services,
+                    "vulnerabilities": stats.vulnerabilities,
+                    "credentials": stats.credentials
+                },
+                "overall_risk": overall_risk,
+                "generated_at": chrono::Utc::now().to_rfc3339()
+            });
+            std::fs::write(&output, serde_json::to_string_pretty(&json)?)?;
+        }
+        "md" => {
+            let md = format!(
+                "# Security Assessment Report\n\n**Date:** {}\n\n## Executive Summary\n\n**Risk Level:** {}\n\n- Hosts: {}\n- Services: {}\n- Vulnerabilities: {}\n- Credentials: {}\n\n## Findings\n\n{}\n\n## Remediation\n\n{}\n",
+                now.format("%Y-%m-%d %H:%M UTC"),
+                overall_risk,
+                stats.hosts,
+                stats.services,
+                stats.vulnerabilities,
+                stats.credentials,
+                findings,
+                remediation
+            );
+            std::fs::write(&output, md)?;
+        }
+        _ => {
+            std::fs::write(&output, html)?;
+        }
+    }
     println!(
         "{}",
         format!("[+] Professional report generated: {}", output)
@@ -1506,6 +1640,7 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
     run_report(&ReportCommands::Generate {
         db: Some(db_path),
         output: report_path.clone(),
+        format: "html".to_string(),
     })?;
     println!(
         "{}",
@@ -1514,6 +1649,182 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
             .green()
     );
 
+    Ok(())
+}
+
+fn detect_tun0_ip() -> Option<String> {
+    let ifaces = ["tun0", "tun1", "tun2", "tap0", "tap1"];
+    for iface_name in &ifaces {
+        if let Ok(cmd_out) = std::process::Command::new("ip")
+            .args(["addr", "show", iface_name])
+            .output()
+        {
+            let out_str = String::from_utf8_lossy(&cmd_out.stdout);
+            for line in out_str.lines() {
+                if line.contains("inet ") || line.contains("inet6 ") {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let ip_with_prefix = parts[1];
+                        if let Some(ip) = ip_with_prefix.split('/').next() {
+                            if !ip.is_empty() && !ip.contains(':') {
+                                return Some(ip.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+static FLAGS: std::sync::LazyLock<std::sync::Mutex<Vec<CtfFlag>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+
+#[derive(Debug, Clone)]
+pub struct CtfFlag {
+    pub flag: String,
+    pub machine: Option<String>,
+    pub timestamp: i64,
+    pub platform: String,
+}
+
+impl CtfFlag {
+    fn to_json(&self) -> String {
+        let machine_json = self
+            .machine
+            .as_ref()
+            .map(|m| format!("\"{}\"", m))
+            .unwrap_or_else(|| "null".to_string());
+        format!(
+            "{{\"flag\":\"{}\",\"machine\":{},\"timestamp\":{},\"platform\":\"{}\"}}",
+            self.flag, machine_json, self.timestamp, self.platform
+        )
+    }
+}
+
+fn run_ctf(command: &CtfCommands) -> anyhow::Result<()> {
+    use colored::Colorize;
+
+    match command {
+        CtfCommands::Flag { flag, machine } => {
+            let platform = determine_platform(flag);
+            let new_flag = CtfFlag {
+                flag: flag.clone(),
+                machine: machine.clone(),
+                timestamp: chrono::Utc::now().timestamp(),
+                platform,
+            };
+            FLAGS.lock().unwrap().push(new_flag);
+            println!("{}", "[+] Flag captured".bold().green());
+            println!("  Flag: {}", flag);
+            if let Some(m) = machine {
+                println!("  Machine: {}", m);
+            }
+            Ok(())
+        }
+        CtfCommands::List => {
+            let flags = FLAGS.lock().unwrap();
+            if flags.is_empty() {
+                println!("{}", "No flags captured yet.".yellow());
+            } else {
+                println!("{}", "Captured Flags:".bold().cyan());
+                for (i, f) in flags.iter().enumerate() {
+                    println!("{}. {} [{}]", i + 1, f.flag, f.platform);
+                    if let Some(m) = &f.machine {
+                        println!("   Machine: {}", m);
+                    }
+                }
+            }
+            Ok(())
+        }
+        CtfCommands::Export { output, format } => {
+            let guard = FLAGS.lock().unwrap();
+            let content: String = match format.as_str() {
+                "json" => {
+                    let mut json = String::from("[\n");
+                    for (i, f) in guard.iter().enumerate() {
+                        if i > 0 {
+                            json.push_str(",\n");
+                        }
+                        json.push_str(&format!("  {}", f.to_json()));
+                    }
+                    json.push_str("\n]");
+                    json
+                }
+                "csv" => {
+                    let mut csv = String::from("flag,machine,timestamp,platform\n");
+                    for f in &*guard {
+                        csv.push_str(&format!(
+                            "{},{},{},{}\n",
+                            f.flag,
+                            f.machine.as_deref().unwrap_or(""),
+                            f.timestamp,
+                            f.platform
+                        ));
+                    }
+                    csv
+                }
+                _ => {
+                    let mut json = String::from("[\n");
+                    for (i, f) in guard.iter().enumerate() {
+                        if i > 0 {
+                            json.push_str(",\n");
+                        }
+                        json.push_str(&format!("  {}", f.to_json()));
+                    }
+                    json.push_str("\n]");
+                    json
+                }
+            };
+            std::fs::write(output, content)?;
+            println!("{}", "[+] Flags exported".bold().green());
+            Ok(())
+        }
+        CtfCommands::Init { platform, name, ip } => {
+            init_ctf_workspace(platform, name, ip.as_deref())?;
+            Ok(())
+        }
+    }
+}
+
+fn determine_platform(flag: &str) -> String {
+    if flag.starts_with("HTB{") || flag.contains("HackTheBox") {
+        "HTB".to_string()
+    } else if flag.starts_with("THM{") || flag.contains("TryHackMe") {
+        "THM".to_string()
+    } else if flag.starts_with("CTF{") || flag.contains("picoCTF") {
+        "picoCTF".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+fn init_ctf_workspace(platform: &str, name: &str, ip: Option<&str>) -> anyhow::Result<()> {
+    use colored::Colorize;
+
+    let workspace_dir = std::path::Path::new(name);
+    std::fs::create_dir_all(workspace_dir)?;
+
+    let notes_path = workspace_dir.join("notes.md");
+    let mut notes = format!("# {}\n\n", name);
+    notes.push_str(&format!("**Platform:** {}\n", platform));
+    if let Some(ip_addr) = ip {
+        notes.push_str(&format!("**IP:** {}\n", ip_addr));
+    }
+    notes.push_str("\n## Enumeration\n\n- \n\n## Flags\n\n| Flag | Location |\n|------|----------|\n| | |\n\n## Exploitation\n\n## Post-Exploitation\n\n");
+    std::fs::write(&notes_path, notes)?;
+
+    let resource_path = workspace_dir.join("resource.rc");
+    let mut rc = String::new();
+    if let Some(ip_addr) = ip {
+        rc.push_str(&format!("set RHOSTS {}\n", ip_addr));
+    }
+    rc.push_str(&format!("search {}\n", name));
+    std::fs::write(&resource_path, rc)?;
+
+    println!("{}", "[+] CTF workspace initialized".bold().green());
+    println!("  Directory: {}", workspace_dir.display());
     Ok(())
 }
 

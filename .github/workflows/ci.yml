@@ -40,6 +40,11 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Security audit
+        run: |
+          cargo install cargo-audit --locked || true
+          cargo audit --locked || true
+
       - name: Tests
         run: cargo test --workspace
 

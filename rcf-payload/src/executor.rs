@@ -81,7 +81,7 @@ impl PayloadExecutor {
         &self,
         shellcode: &[u8],
         arch: &Arch,
-        timeout_secs: u64,
+        _timeout_secs: u64,
     ) -> anyhow::Result<ExecutionResult> {
         #[cfg(target_os = "macos")]
         {
@@ -205,6 +205,7 @@ impl PayloadExecutor {
     }
 
     /// Build x64 ELF binary.
+    #[allow(dead_code)]
     fn build_elf_x64(&self, shellcode: &[u8]) -> anyhow::Result<Vec<u8>> {
         // Minimal x64 ELF with shellcode in executable section
         // This is a simplified ELF builder for testing purposes
@@ -265,6 +266,7 @@ impl PayloadExecutor {
     }
 
     /// Build x86 ELF binary.
+    #[allow(dead_code)]
     fn build_elf_x86(&self, shellcode: &[u8]) -> anyhow::Result<Vec<u8>> {
         let mut elf = Vec::new();
 

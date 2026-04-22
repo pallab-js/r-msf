@@ -141,13 +141,15 @@ impl C2Server {
         // Extract PSK from greeting: "RCF_AGENT_V1:<psk>"
         let provided_psk = &client_msg["RCF_AGENT_V1:".len()..];
 
-        // Verify PSK if configured
-        if let Some(expected_psk) = psk
-            && provided_psk != expected_psk
-        {
-            warn!("PSK mismatch from {}: invalid key provided", peer_addr);
-            socket.write_all(b"AUTH_FAILED\n").await?;
-            anyhow::bail!("PSK mismatch");
+        // Verify PSK if configured - use constant-time comparison to prevent timing attacks
+        use subtle::ConstantTimeEq;
+        if let Some(expected_psk) = psk {
+            let psk_equal = provided_psk.as_bytes().ct_eq(expected_psk.as_bytes());
+            if bool::from(psk_equal) {
+                warn!("PSK mismatch from {}: invalid key provided", peer_addr);
+                socket.write_all(b"AUTH_FAILED\n").await?;
+                anyhow::bail!("PSK mismatch");
+            }
         }
 
         info!("Agent {} authenticated successfully", peer_addr);

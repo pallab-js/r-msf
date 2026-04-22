@@ -118,6 +118,16 @@ impl ConnectionValidator {
         }
         false
     }
+
+    /// Check if an IP address is private/reserved (for CTF/VPN scenarios).
+    /// Returns true if the IP is private or reserved.
+    pub fn is_private_ip(ip: &str) -> bool {
+        match ip.parse::<IpAddr>() {
+            Ok(IpAddr::V4(ipv4)) => Self::is_private_or_reserved_ipv4(&ipv4),
+            Ok(IpAddr::V6(ipv6)) => Self::is_private_or_reserved_ipv6(&ipv6),
+            Err(_) => false,
+        }
+    }
 }
 
 /// Supported payload types.
@@ -239,6 +249,7 @@ pub struct PayloadConfig {
     pub polymorphic: bool,
     pub nop_sled_size: Option<usize>,
     pub bad_chars: Vec<u8>,
+    pub allow_private_lhost: bool,
 }
 
 impl PayloadConfig {
@@ -257,7 +268,8 @@ impl PayloadConfig {
             encoder: None,
             polymorphic: false,
             nop_sled_size: None,
-            bad_chars: vec![0x00], // Null bytes bad by default
+            bad_chars: vec![0x00],
+            allow_private_lhost: false,
         }
     }
 }
@@ -380,7 +392,8 @@ impl PayloadGenerator {
 
         // SECURITY: Validate IP before using it in shellcode
         // Skip validation for stages since they're delivered by stagers on internal networks
-        if config.payload_type != PayloadType::Stage {
+        // Allow private LHOST if explicitly enabled (for VPN/CTF scenarios)
+        if config.payload_type != PayloadType::Stage && !config.allow_private_lhost {
             ConnectionValidator::validate_ip(&config.lhost)?;
         }
 
@@ -396,19 +409,15 @@ impl PayloadGenerator {
     }
 
     /// Convert IP address string to bytes.
+    /// Supports both IPv4 and IPv6 addresses.
     fn ip_to_bytes(ip: &str) -> anyhow::Result<Vec<u8>> {
-        let parts: Vec<&str> = ip.split('.').collect();
-        if parts.len() != 4 {
-            return Err(anyhow::anyhow!("Invalid IP address: {}", ip));
+        match ip.parse() {
+            Ok(IpAddr::V4(ipv4)) => Ok(ipv4.octets().to_vec()),
+            Ok(IpAddr::V6(_)) => Err(anyhow::anyhow!(
+                "IPv6 payloads require stageless template. Use --stage-url for IPv6 staging."
+            )),
+            Err(e) => Err(anyhow::anyhow!("Invalid IP address: {}", e)),
         }
-        let mut bytes = Vec::with_capacity(4);
-        for part in parts {
-            let byte: u8 = part
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Invalid IP octet: {}", part))?;
-            bytes.push(byte);
-        }
-        Ok(bytes)
     }
 
     /// Replace all occurrences of a placeholder pattern in shellcode.

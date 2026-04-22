@@ -177,11 +177,20 @@ impl SharedContext {
 #[cfg(feature = "reqwest")]
 impl Context {
     /// Get a new HTTP client for making HTTP requests.
-    /// Uses the current context's TLS settings.
+    /// Uses the current context's TLS settings and proxy from PROXIES option.
     pub fn http_client(&self) -> anyhow::Result<reqwest::Client> {
-        reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .danger_accept_invalid_certs(!self.is_strict_tls())
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(30));
+
+        // Add proxy from PROXIES option if set
+        if let Some(proxy_url) = self.get(keys::PROXIES)
+            && let Ok(proxy) = reqwest::Proxy::all(proxy_url)
+        {
+            builder = builder.proxy(proxy);
+        }
+
+        builder
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build HTTP client: {}", e))
     }

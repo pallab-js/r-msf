@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{TITLE}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #333; }
+        .finding { border: 1px solid #ccc; padding: 15px; margin: 10px 0; }
+        .critical { border-left: 4px solid #d32f2f; }
+        .high { border-left: 4px solid #f57c00; }
+        .medium { border-left: 4px solid #fbc02d; }
+        .low { border-left: 4px solid #388e3c; }
+    </style>
+</head>
+<body>
+    <h1>{{TITLE}}</h1>
+    <p>Generated: {{DATE}}</p>
+    <div class="findings">
+        {{FINDINGS}}
+    </div>
+</body>
+</html>

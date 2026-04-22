@@ -1,9 +1,9 @@
 # Rust Cybersecurity Framework (RCF)
 
-[![CI](https://github.com/rcf/rcf/actions/workflows/ci.yml/badge.svg)](https://github.com/rcf/rcf/actions/workflows/ci.yml)
+[![CI](https://github.com/pallab-js/r-msf/actions/workflows/ci.yml/badge.svg)](https://github.com/pallab-js/r-msf/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org)
-[![Platform](https://img.shields.io/badge/platform-linux%20x86__64-blue.svg)](https://github.com/rcf/rcf)
+[![Platform](https://img.shields.io/badge/platform-linux%20x86__64-blue.svg)](https://github.com/pallab-js/r-msf)
 
 > **Fast. Memory-Safe. Linux-First.**
 
@@ -81,8 +81,8 @@ rcf/
 ### From Source
 
 ```bash
-git clone https://github.com/rcf/rcf.git
-cd rcf
+git clone https://github.com/pallab-js/r-msf.git
+cd r-msf
 cargo build --release -p rcf-cli
 sudo cp target/release/rcf /usr/local/bin/
 ```

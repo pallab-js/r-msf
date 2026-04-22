@@ -1,7 +1,7 @@
 # Rust
 /target/
 **/*.rs.bk
-Cargo.lock
+# IMPORTANT: Cargo.lock IS version-controlled for reproducible builds and supply chain security
 
 # IDE
 .idea/
@@ -23,7 +23,7 @@ rcf_context.toml
 loot/
 output/
 rcf.db
-*.html
+# Note: report_template.html is embedded in CLI
 
 # Build artifacts
 **/dbg-artifacts/
