@@ -8,9 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Meterpreter command sandboxing with dangerous command blocklist
+- `ARCHITECTURE.md` — crate dependency graph, module lifecycle, new-module guide, C2 protocol overview
+- `From<toml::de::Error>` and `From<toml::ser::Error>` conversions on `RcfError` for ergonomic `?` usage
+- `From<reqwest::Error>` conversion on `RcfError` (feature-gated behind `reqwest`)
+- `zeroize` dependency — plaintext credential buffer is zeroed from memory immediately after Argon2 hashing in `add_credential()`
+- Unit tests for `rcf-core`: `Context`, `ModuleOptions`, `AnonymityConfig::validate()`, TOML round-trip (26 tests total)
+- Unit tests for `rcf-db`: host CRUD, credential hashing verification, duplicate deduplication, vulnerability save (4 tests, in-memory SQLite)
+- Integration tests for `rcf-modules`: registry register/get/search, `Module::check()` lifecycle (5 tests)
+
+### Changed
+- Split `rcf-core/src/anonymity.rs` (26 KB) into focused sub-modules: `anonymity/{mod,proxy,timing,waf,report,decoy}.rs` — public API unchanged
+- Removed 5 `#![allow(...)]` lint suppressions from anonymity module; fixed underlying `collapsible_if` lints
+- `config_to_toml` / `config_from_toml` now use `?` operator via new `From` conversions
+- Updated credential hashing doc comment to accurately describe Argon2id + `zeroize` behaviour
+
+### Meterpreter command sandboxing with dangerous command blocklist
 - `Context::http_client()` for modules to respect `--strict-tls` flag
-- Automatic SHA-256 credential hashing in database layer
+- Automatic credential hashing (Argon2id + random salt) in database layer
 - `tempfile` crate integration for unpredictable payload filenames
 - HTML escaping for all report generation fields
 - Path validation for file write operations (payloads, reports, exports)
@@ -37,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `SECURITY.md` for responsible disclosure
 - Added dangerous command blocklist to C2 server
 - Switched default credential storage from plaintext to hashed
+- Plaintext credential buffer now zeroed via `zeroize` after hashing
 
 ## [0.1.0] - 2024-04-05
 

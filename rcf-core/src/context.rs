@@ -150,6 +150,55 @@ impl Default for Context {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_has_default_options() {
+        let ctx = Context::new();
+        assert_eq!(ctx.get("LPORT"), Some(&"4444".to_string()));
+        assert_eq!(ctx.get("RPORT"), Some(&"80".to_string()));
+        assert_eq!(ctx.get("THREADS"), Some(&"10".to_string()));
+    }
+
+    #[test]
+    fn test_set_get_round_trip() {
+        let mut ctx = Context::new();
+        ctx.set("RHOSTS", "10.0.0.1");
+        assert_eq!(ctx.get("RHOSTS"), Some(&"10.0.0.1".to_string()));
+        // Keys are case-insensitive
+        assert_eq!(ctx.get("rhosts"), Some(&"10.0.0.1".to_string()));
+    }
+
+    #[test]
+    fn test_has_option_missing_key() {
+        let ctx = Context::new();
+        assert!(!ctx.has_option("RHOSTS"));
+    }
+
+    #[test]
+    fn test_has_option_empty_value() {
+        let mut ctx = Context::new();
+        ctx.set("RHOSTS", "");
+        assert!(!ctx.has_option("RHOSTS"));
+    }
+
+    #[test]
+    fn test_verbose_flag_synced() {
+        let mut ctx = Context::new();
+        assert!(!ctx.verbose);
+        ctx.set("VERBOSE", "true");
+        assert!(ctx.verbose);
+    }
+
+    #[test]
+    fn test_get_lport_default() {
+        let ctx = Context::new();
+        assert_eq!(ctx.get_lport(), 4444);
+    }
+}
+
 /// Thread-safe shared context wrapper.
 #[derive(Debug, Clone)]
 pub struct SharedContext {

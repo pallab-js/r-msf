@@ -83,6 +83,14 @@ rcf anon --import config.toml
 **Proxy types**: `socks5://`, `socks4://`, `http://`, `https://`
 **Features**: User-Agent rotation, WAF detection (8+ WAFs), silent mode, decoy traffic, report anonymizer
 
+**Anonymity module layout** (`rcf-core/src/anonymity/`):
+- `mod.rs` — `AnonymityLevel`, `AnonymityConfig`, TOML helpers
+- `proxy.rs` — `ProxyServer`, `ProxyProtocol`, `SshTunnelConfig`
+- `timing.rs` — `AnonymityManager` (jitter, UA rotation, WAF check)
+- `waf.rs` — `WafDetection`, `detect_waf()`, `is_waf_blocked()`
+- `report.rs` — `ReportAnonymizer`
+- `decoy.rs` — `DecoyConfig`, `DecoyTarget`, `DecoyMethod`
+
 ## Module Development
 
 Every module must implement `Module` trait:

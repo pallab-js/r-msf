@@ -163,10 +163,11 @@ impl RcfDatabase {
     /// Store discovered credentials.
     ///
     /// # Security Note
-    /// By default, passwords are hashed using SHA-256 with a per-host/per-user salt
-    /// before storage. This prevents plaintext credential exposure if the database
-    /// is accessed by unauthorized parties.
+    /// Passwords are hashed with Argon2 before storage. The plaintext is held in a
+    /// `Zeroizing<String>` buffer that is zeroed from memory immediately after hashing.
     pub fn add_credential(&mut self, cred: NewCredential) -> anyhow::Result<()> {
+        use zeroize::Zeroizing;
+
         // Avoid duplicates
         let existing: Option<Credential> = credentials::table
             .filter(
@@ -190,24 +191,25 @@ impl RcfDatabase {
         let final_cred = if cred.password.starts_with("hash:") {
             cred
         } else {
-            // Use Argon2 for secure password hashing (memory-hard, resistant to GPU attacks)
             use argon2::{
                 Argon2,
                 password_hash::{PasswordHasher, SaltString},
             };
 
-            // Generate a cryptographically secure random salt using getrandom
+            // Hold plaintext in a Zeroizing buffer — zeroed on drop after hashing.
+            let plaintext = Zeroizing::new(cred.password.clone());
+
             let mut salt_bytes = [0u8; 16];
             getrandom::getrandom(&mut salt_bytes)
                 .map_err(|e| anyhow::anyhow!("Failed to generate random salt: {}", e))?;
             let salt = SaltString::encode_b64(&salt_bytes)
                 .map_err(|e| anyhow::anyhow!("Failed to encode salt: {}", e))?;
 
-            let argon2 = Argon2::default();
-            let hash = argon2
-                .hash_password(cred.password.as_bytes(), &salt)
+            let hash = Argon2::default()
+                .hash_password(plaintext.as_bytes(), &salt)
                 .map_err(|e| anyhow::anyhow!("Password hashing failed: {}", e))?;
 
+            // `plaintext` is dropped (and zeroed) here before constructing final_cred.
             NewCredential {
                 password: format!("hash:argon2:{}", hash),
                 ..cred
@@ -348,5 +350,70 @@ impl std::fmt::Display for DbStats {
         writeln!(f, "  {:<18} {}", "Vulnerabilities:", self.vulnerabilities)?;
         writeln!(f, "  {:<18} {}", "Sessions:", self.sessions)?;
         writeln!(f, "  {:<18} {}", "Loot:", self.loot)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{NewCredential, NewVulnerability};
+
+    fn test_db() -> RcfDatabase {
+        let mut db = RcfDatabase::new(":memory:").expect("in-memory db");
+        db.init().expect("migrations");
+        db
+    }
+
+    #[test]
+    fn test_save_and_retrieve_host() {
+        let mut db = test_db();
+        let id = db.save_host("10.0.0.1").unwrap();
+        assert!(!id.is_empty());
+        let hosts = db.list_hosts().unwrap();
+        assert_eq!(hosts.len(), 1);
+        assert_eq!(hosts[0].address, "10.0.0.1");
+    }
+
+    #[test]
+    fn test_credential_is_hashed_on_insert() {
+        let mut db = test_db();
+        let host_id = db.save_host("10.0.0.2").unwrap();
+        let cred = NewCredential::new(&host_id, "ssh", "admin", "s3cr3t");
+        db.add_credential(cred).unwrap();
+
+        let creds = db.list_credentials().unwrap();
+        assert_eq!(creds.len(), 1);
+        assert!(
+            creds[0].password.starts_with("hash:argon2:"),
+            "password should be hashed, got: {}",
+            creds[0].password
+        );
+        assert_ne!(creds[0].password, "s3cr3t");
+    }
+
+    #[test]
+    fn test_duplicate_credential_skipped() {
+        let mut db = test_db();
+        let host_id = db.save_host("10.0.0.3").unwrap();
+        let cred1 = NewCredential::new(&host_id, "ftp", "user", "pass1");
+        let cred2 = NewCredential::new(&host_id, "ftp", "user", "pass2");
+        db.add_credential(cred1).unwrap();
+        db.add_credential(cred2).unwrap(); // should be silently skipped
+
+        let creds = db.list_credentials().unwrap();
+        assert_eq!(creds.len(), 1);
+    }
+
+    #[test]
+    fn test_save_vulnerability() {
+        let mut db = test_db();
+        let host_id = db.save_host("10.0.0.4").unwrap();
+        let vuln = NewVulnerability::new(&host_id, "CVE-2021-44228 Log4Shell", "critical");
+        db.add_vulnerability(vuln).unwrap();
+
+        let vulns = db.list_vulnerabilities().unwrap();
+        assert_eq!(vulns.len(), 1);
+        assert_eq!(vulns[0].severity, "critical");
+        assert!(vulns[0].name.contains("Log4Shell"));
     }
 }

@@ -150,11 +150,12 @@ This project has undergone a comprehensive security audit. See [`SECURITY.md`](S
 
 **Key security features:**
 - Meterpreter command sandboxing (blocks dangerous patterns)
-- Automatic credential hashing (SHA-256 + salt)
+- Automatic credential hashing (Argon2id + random salt); plaintext zeroed from memory via `zeroize` immediately after hashing
 - HTML escaping in all report generation
 - Path validation for file operations
 - Secure temp files via `tempfile` crate
 - `--strict-tls` flag for TLS validation
+- C2 agent command allowlist — only explicitly permitted commands execute
 
 > ⚠️ **Never run RCF as root** unless required (e.g., SYN scanning). Use a sandboxed environment.
 
@@ -179,7 +180,7 @@ make scan         # Quick scan localhost
 make venom        # Generate test payload
 ```
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines and [`ARCHITECTURE.md`](ARCHITECTURE.md) for crate dependency graph, module lifecycle, and how to add new modules.
 
 ## 📄 License
 

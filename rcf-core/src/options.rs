@@ -152,3 +152,41 @@ impl Default for ModuleOptions {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_missing_required() {
+        let mut opts = ModuleOptions::new();
+        opts.add(ModuleOption::new("RHOSTS", true, "Target host"));
+        assert!(opts.validate().is_err());
+        let missing = opts.validate().unwrap_err();
+        assert!(missing.contains(&"RHOSTS".to_string()));
+    }
+
+    #[test]
+    fn test_validate_passes_when_set() {
+        let mut opts = ModuleOptions::new();
+        opts.add(ModuleOption::new("RHOSTS", true, "Target host"));
+        opts.set("RHOSTS", OptionValue::String("10.0.0.1".to_string()))
+            .unwrap();
+        assert!(opts.validate().is_ok());
+    }
+
+    #[test]
+    fn test_optional_field_not_required() {
+        let mut opts = ModuleOptions::new();
+        opts.add(ModuleOption::new("VERBOSE", false, "Verbose output"));
+        // Not set, but not required — should pass
+        assert!(opts.validate().is_ok());
+    }
+
+    #[test]
+    fn test_set_unknown_option_errors() {
+        let mut opts = ModuleOptions::new();
+        let result = opts.set("NONEXISTENT", OptionValue::Boolean(true));
+        assert!(result.is_err());
+    }
+}
