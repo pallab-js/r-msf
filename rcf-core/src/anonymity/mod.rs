@@ -162,10 +162,18 @@ pub struct AnonymityConfig {
     pub timeout_seconds: u64,
 }
 
-fn default_jitter_min() -> u64 { 100 }
-fn default_jitter_max() -> u64 { 500 }
-fn default_true() -> bool { true }
-fn default_timeout() -> u64 { 10 }
+fn default_jitter_min() -> u64 {
+    100
+}
+fn default_jitter_max() -> u64 {
+    500
+}
+fn default_true() -> bool {
+    true
+}
+fn default_timeout() -> u64 {
+    10
+}
 
 impl AnonymityConfig {
     pub fn from_level(level: AnonymityLevel) -> Self {
@@ -256,9 +264,11 @@ mod tests {
 
     #[test]
     fn test_validate_jitter_min_gt_max_errors() {
-        let mut cfg = AnonymityConfig::default();
-        cfg.jitter_min_ms = 5000;
-        cfg.jitter_max_ms = 100;
+        let cfg = AnonymityConfig {
+            jitter_min_ms: 5000,
+            jitter_max_ms: 100,
+            ..AnonymityConfig::default()
+        };
         assert!(cfg.validate().is_err());
     }
 
@@ -270,12 +280,14 @@ mod tests {
 
     #[test]
     fn test_validate_decoy_ratio_out_of_range() {
-        let mut cfg = AnonymityConfig::default();
-        cfg.add_decoy_traffic = Some(DecoyConfig {
-            enabled: true,
-            decoy_ratio: 1.5,
-            decoy_targets: vec![],
-        });
+        let cfg = AnonymityConfig {
+            add_decoy_traffic: Some(DecoyConfig {
+                enabled: true,
+                decoy_ratio: 1.5,
+                decoy_targets: vec![],
+            }),
+            ..AnonymityConfig::default()
+        };
         assert!(cfg.validate().is_err());
     }
 

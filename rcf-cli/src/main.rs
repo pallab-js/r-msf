@@ -642,7 +642,13 @@ async fn main() -> anyhow::Result<()> {
     // Start interactive console
     use rcf_console::RcfConsole;
     let mut console = RcfConsole::new(manager, context)?;
-    console.run().await?;
+
+    tokio::select! {
+        result = console.run() => { result?; }
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("Received SIGINT, shutting down gracefully...");
+        }
+    }
 
     Ok(())
 }
@@ -1571,7 +1577,12 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
 }
 
 #[cfg(feature = "db")]
-async fn run_auto(target: &str, output: Option<&str>, aggressive: bool, max_modules: usize) -> anyhow::Result<()> {
+async fn run_auto(
+    target: &str,
+    output: Option<&str>,
+    aggressive: bool,
+    max_modules: usize,
+) -> anyhow::Result<()> {
     use rcf_db::connection::RcfDatabase;
     use rcf_network::scanner::{PortRange, ScanConfig, TcpConnectScanner};
     use std::time::Duration;
@@ -1583,8 +1594,20 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool, max_modu
         if aggressive { "Aggressive" } else { "Stealth" }
     );
 
-    // 1. Initialize DB
-    let db_path = format!("/tmp/rcf_{}.db", target.replace('.', "_"));
+    // 1. Initialize DB — use an unpredictable temp path to prevent symlink attacks.
+    let db_dir = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join(".rcf");
+    std::fs::create_dir_all(&db_dir)?;
+    let db_file = tempfile::Builder::new()
+        .prefix("rcf_auto_")
+        .suffix(".db")
+        .rand_bytes(12)
+        .tempfile_in(&db_dir)
+        .map_err(|e| anyhow::anyhow!("Failed to create temp DB: {}", e))?;
+    let db_path = db_file.path().to_string_lossy().to_string();
+    // Keep db_file alive for the duration of the run so the file isn't deleted.
+    let _db_file_guard = db_file;
     let mut db = RcfDatabase::new(&db_path)?;
     db.init()?;
 

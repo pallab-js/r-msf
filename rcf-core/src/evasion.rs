@@ -261,10 +261,10 @@ pub fn build_http_client(evasion: &EvasionConfig, accept_invalid_certs: bool) ->
         builder = builder.user_agent(get_random_agent().user_agent().to_string());
     }
 
-    if let Some(ref url) = evasion.proxy.proxy_url {
-        if let Ok(proxy) = reqwest::Proxy::all(url) {
-            builder = builder.proxy(proxy);
-        }
+    if let Some(ref url) = evasion.proxy.proxy_url
+        && let Ok(proxy) = reqwest::Proxy::all(url)
+    {
+        builder = builder.proxy(proxy);
     }
 
     builder.build().unwrap_or_default()

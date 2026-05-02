@@ -131,7 +131,7 @@ impl CidrIter {
     fn new(network_addr: u32, num_hosts: u32, port: u16) -> Self {
         Self {
             network_addr,
-            current: 1, // skip network address (.0)
+            current: 1,                       // skip network address (.0)
             end: num_hosts.saturating_sub(1), // skip broadcast
             port,
         }

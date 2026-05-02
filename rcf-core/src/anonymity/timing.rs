@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 use rand::Rng;
 use tokio::sync::RwLock;
 
-use super::waf::{WafDetection, detect_waf};
 use super::AnonymityConfig;
+use super::waf::{WafDetection, detect_waf};
 
 /// State manager for anonymity operations.
 pub struct AnonymityManager {

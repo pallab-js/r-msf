@@ -62,28 +62,68 @@ pub fn base64_decode(input: &str) -> Vec<u8> {
     result
 }
 
-/// Start the C2 control server on the given address.
+/// Start the C2 control server.
+///
+/// Always binds to 127.0.0.1 regardless of `listen_addr` — the control port
+/// must never be exposed on a network interface. The optional `psk` is required
+/// as the first line of every control connection: "AUTH <psk>\n".
 pub async fn start_control_server(
-    listen_addr: &str,
+    _listen_addr: &str,
     listen_port: u16,
     sessions: Arc<SessionManager>,
 ) -> anyhow::Result<()> {
-    let addr = format!("{}:{}", listen_addr, listen_port);
+    start_control_server_with_psk(_listen_addr, listen_port, sessions, None).await
+}
+
+/// Start the C2 control server with an optional PSK for authentication.
+pub async fn start_control_server_with_psk(
+    _listen_addr: &str,
+    listen_port: u16,
+    sessions: Arc<SessionManager>,
+    psk: Option<String>,
+) -> anyhow::Result<()> {
+    // Always bind to loopback — control port must never be network-exposed.
+    let addr = format!("127.0.0.1:{}", listen_port);
     let listener = TcpListener::bind(&addr).await?;
-    info!("C2 control server listening on {}", addr);
+    info!("C2 control server listening on {} (loopback only)", addr);
 
     loop {
         let (socket, peer) = listener.accept().await?;
         info!("Control connection from {}", peer);
         let sessions = Arc::clone(&sessions);
-        tokio::spawn(handle_control_connection(socket, sessions));
+        let psk = psk.clone();
+        tokio::spawn(handle_control_connection(socket, sessions, psk));
     }
 }
 
-async fn handle_control_connection(socket: tokio::net::TcpStream, sessions: Arc<SessionManager>) {
+async fn handle_control_connection(
+    socket: tokio::net::TcpStream,
+    sessions: Arc<SessionManager>,
+    psk: Option<String>,
+) {
     let (read_half, mut write_half) = socket.into_split();
     let mut reader = BufReader::new(read_half);
     let mut line = String::new();
+
+    // PSK authentication: expect "AUTH <psk>\n" as the first line.
+    if let Some(ref expected) = psk {
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+        let provided = line.trim().strip_prefix("AUTH ").unwrap_or("");
+        use subtle::ConstantTimeEq;
+        if !bool::from(provided.as_bytes().ct_eq(expected.as_bytes())) {
+            let _ = write_half
+                .write_all(b"ERR\nAuthentication failed\nEND\n")
+                .await;
+            return;
+        }
+        let _ = write_half.write_all(b"OK\nAuthenticated\nEND\n").await;
+        let _ = write_half.flush().await;
+        line.clear();
+    }
 
     loop {
         line.clear();

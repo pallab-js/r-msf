@@ -81,11 +81,12 @@ impl PayloadExecutor {
         &self,
         shellcode: &[u8],
         arch: &Arch,
-        _timeout_secs: u64,
+        timeout_secs: u64,
     ) -> anyhow::Result<ExecutionResult> {
         #[cfg(target_os = "macos")]
         {
             // macOS: build Mach-O and validate structure (dry run)
+            let _ = timeout_secs;
             let _macho = self.build_elf(shellcode, arch)?;
             Ok(ExecutionResult {
                 stdout: format!(
