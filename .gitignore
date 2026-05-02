@@ -9,8 +9,6 @@
 *.swp
 *.swo
 *~
-.qwen/
-
 # OS
 .DS_Store
 Thumbs.db

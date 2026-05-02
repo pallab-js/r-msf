@@ -137,7 +137,7 @@ The agent enforces a command allowlist (`ALLOWED_COMMANDS` in `rcf-agent/src/mai
 | DB file permissions | `0600` (owner read/write only) set on creation |
 | C2 authentication | Pre-shared key required; agent refuses to start without one |
 | Agent command sandbox | Allowlist + suspicious-pattern blocklist |
-| TLS validation | `--strict-tls` flag; disabled by default for lab use |
+| TLS validation | On by default; use `--dangerous-accept-invalid-certs` only for lab targets with self-signed certs |
 | HTML reports | All user data HTML-escaped before insertion |
 | Temp files | `tempfile` crate for unpredictable filenames |
 
