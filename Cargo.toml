@@ -65,7 +65,7 @@ socket2 = "0.5"
 ssh2 = "0.9"
 
 # FTP
-ftp = "3"
+suppaftp = "8"
 
 # Payload generation (Phase 3)
 byteorder = "1"

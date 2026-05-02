@@ -19,4 +19,4 @@ urlencoding = "2"
 regex = "1"
 once_cell = "1"
 ssh2 = "0.9"
-ftp = "3"
+suppaftp = { workspace = true }

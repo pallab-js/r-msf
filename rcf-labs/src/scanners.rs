@@ -735,7 +735,7 @@ impl Module for FtpLogin {
 
 /// Attempt FTP login
 async fn try_ftp_login(host: &str, port: u16, user: &str, password: &str) -> anyhow::Result<bool> {
-    use ftp::FtpStream;
+    use suppaftp::FtpStream;
 
     let host = host.to_string();
     let user = user.to_string();
