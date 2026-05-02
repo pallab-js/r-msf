@@ -1,199 +1,93 @@
-# Rust Cybersecurity Framework (RCF)
+# Rust Cybersecurity Framework (RCF) v0.2.0
 
 [![CI](https://github.com/pallab-js/r-msf/actions/workflows/ci.yml/badge.svg)](https://github.com/pallab-js/r-msf/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](https://www.rust-lang.org)
-[![Platform](https://img.shields.io/badge/platform-linux%20x86__64-blue.svg)](https://github.com/pallab-js/r-msf)
+[![Version](https://img.shields.io/badge/version-0.2.0-green.svg)](CHANGELOG.md)
 
-> **Fast. Memory-Safe. Linux-First.**
+> **Fast. Memory-Safe. Secure by Default.**
 
-**RCF (Rust Cybersecurity Framework)** is a lightweight, high-performance penetration testing framework written entirely in Rust, purpose-built for Linux security assessments. With 60+ pre-built modules for network scanning, web exploitation, and post-exploitation — optimized for HackTheBox, TryHackMe, and Metasploitable labs.
+**RCF (Rust Cybersecurity Framework)** is a lightweight, high-performance penetration testing framework written entirely in Rust. Purpose-built for speed and reliability in Linux security assessments, RCF provides 60+ pre-built modules for network scanning, web exploitation, and post-exploitation.
 
-## ⚡ Quick Start
+## ⚡ v0.2.0 Highlights
+
+- **Secure by Default** — TLS validation enabled for all modules; secure credential hashing with Argon2id.
+- **Improved Evasion** — Centralized HTTP client builder with User-Agent rotation and proxy support.
+- **C2 Hardening** — Shell metacharacter filtering and sandboxed command execution.
+- **Suppaftp Integration** — Replaced unmaintained FTP engine with modern, async `suppaftp` for reliable scanning.
+- **Stability Fixes** — Resolved critical PSK auth inversion and race conditions in session handling.
+
+## 🚀 Quick Start
 
 ```bash
-# Build
-cargo build --release
+# Build release binary
+cargo build --release -p rcf-cli
 
-# Start the interactive console
+# Start interactive console
 ./target/release/rcf
 
-# Scan a target
-./target/release/rcf scan -t 192.168.1.1 --ports common
+# Scan a target (CIDR supported)
+rcf scan -t 10.10.10.0/24 --ports common
 
-# Search modules
-./target/release/rcf search log4j
-
-# Generate a payload
-./target/release/rcf venom -p reverse_tcp --lhost 10.0.0.1 --lport 4444 -f c
+# Run automated attack chain + report
+rcf auto -t 10.129.1.1 -o report.html
 ```
 
 ## 🏗 Architecture
 
 ```
 rcf/
-├── rcf-core/       # Core types, traits, Context, Target, Evasion
-├── rcf-cli/        # CLI entry point (clap), reports, automation
-├── rcf-console/    # Interactive REPL with tab completion
-├── rcf-modules/    # Module registry and plugin system
-├── rcf-labs/       # 60+ exploit/scanner modules for HTB/THM/Metasploitable
-│   └── exploits/   # Per-exploit sub-modules (cmd_injection, sqli, etc.)
-├── rcf-network/    # TCP scanners, protocol handlers
-├── rcf-payload/    # Payload generator, encoders, shellcode
-├── rcf-db/         # SQLite + Diesel with credential hashing
-└── rcf-c2/         # C2 server with sandboxed command execution
+├── rcf-core/       # Core types, Context, Evasion, TLS security
+├── rcf-cli/        # Entry point, automation logic, report templates
+├── rcf-console/    # Interactive TUI/REPL with tab completion
+├── rcf-modules/    # Registry and dynamic module loader
+├── rcf-labs/       # 60+ modules for HTB/THM/Metasploitable
+├── rcf-network/    # Async TCP/UDP scanners, protocol handlers
+├── rcf-payload/    # Polymorphic payload generator & encoders
+├── rcf-db/         # Secure SQLite persistence (Diesel + Argon2)
+└── rcf-c2/         # Multi-session C2 server with Metasploit-like handlers
 ```
 
-## 🚀 Features
+## ✨ Core Features
 
-### Scanning & Discovery
-- **Parallel CIDR scanning** — Scan entire subnets (`192.168.1.0/24`); lazy expansion with `--max-targets` cap prevents OOM on large ranges
-- **Protocol fingerprinting** — HTTP, SSH, SMB, VNC, MongoDB, Memcached
-- **OS detection** — TCP stack analysis and service banner extraction
-- **Auth brute force** — SSH, FTP, HTTP, SNMP, MySQL, PostgreSQL
+### Discovery & Intelligence
+- **High-Speed Scanners** — Parallel CIDR scanning with configurable concurrency and target caps.
+- **Deep Fingerprinting** — Protocol-specific probes for HTTP, SSH, SMB, VNC, Redis, and more.
+- **Auth Brute Force** — Parallel credential testing for SSH, FTP, HTTP, and SNMP.
 
-### Exploitation
-- **Web exploits** — Log4Shell, SQLi, XSS, SSRF, path traversal, SSTI, deserialization
-- **Apache Struts RCE** — CVE-2017-9805, CVE-2018-11776
-- **PHP CGI RCE** — CVE-2012-1823 argument injection
-- **Service exploits** — Redis, Tomcat, Jenkins, WordPress, Elasticsearch, Docker API
-- **Lab favorites** — Metasploitable 2/3, THM/HTB common vulnerabilities
+### Exploitation & Labs
+- **Web Modules** — Log4Shell, SQLi, XSS, SSRF, Deserialization, and Apache Struts RCEs.
+- **Service Exploits** — Targeted attacks for Metasploitable 2/3 and common lab vulnerabilities.
+- **Custom Payloads** — Generate polymorphic shellcode in C, Python, or Raw formats.
 
 ### Post-Exploitation
-- **SUID escalation** — GTFOBins-powered privilege escalation checker
-- **Linux enumeration** — SUID binaries, cron jobs, writable files, sudo misconfigs
-- **Web shell generator** — PHP, ASP, JSP shell templates
-- **Reverse shell listener** — Multi-shell-type listener with PTY upgrade
-
-### Payload Generation
-- **Shellcode templates** — linux/x64, linux/x86
-- **Encoders** — XOR (single/multi-byte), polymorphic engine
-- **Output formats** — C, Python, hex, base64, raw
-- **Secure execution** — Uses `tempfile` for unpredictable filenames
-
-### Intelligence & Reporting
-- **SQLite database** — Hosts, services, credentials (auto-hashed), vulnerabilities; WAL mode for concurrent access
-- **Professional reports** — HTML with risk scoring, executive summary, remediation
-- **Automated attack chains** — `rcf auto -t <target> -o report.html`
-- **Export formats** — JSON, CSV, XML
+- **Linux Escalate** — Automatic SUID and capability-based privilege escalation checker.
+- **Multi-Shell C2** — Manage multiple reverse shells with a centralized C2 handler.
+- **Persistence** — Credential harvesting and automated persistence installation.
 
 ## 📦 Installation
-
-### From Source
 
 ```bash
 git clone https://github.com/pallab-js/r-msf.git
 cd r-msf
 cargo build --release -p rcf-cli
-sudo cp target/release/rcf /usr/local/bin/
 ```
 
-### Requirements
+*Requires Rust 2024 (1.85+).*
 
-- Rust 2024 Edition (1.75+)
-- `cargo`
+## 🔒 Security Policy
 
-### Optional: Minimal Build
+This framework is for **authorized testing only**. RCF implements strict security defaults:
+- TLS certificates are validated by default (opt-in insecure with `--dangerous-accept-invalid-certs`).
+- Sensitive data is zeroed from memory immediately after use via `zeroize`.
+- C2 commands are filtered for metacharacter injection.
 
-```bash
-# Without database and C2 server (~3.5MB)
-cargo build --release -p rcf-cli --no-default-features
-```
-
-## 📖 Usage
-
-### Interactive Console
-
-```bash
-./target/release/rcf
-> help
-> show modules
-> search smb
-> use exploit/windows/smb/eternalblue
-> set RHOSTS 192.168.1.100
-> run
-```
-
-### CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `rcf` | Start interactive console (CLI-only) |
-| `rcf scan -t <target>` | Port scan (supports CIDR, ranges) |
-| `rcf search <keyword>` | Search modules |
-| `rcf info <module>` | Show module details |
-| `rcf venom -p <type> --lhost <ip>` | Generate payload |
-| `rcf auto -t <target> -o report.html` | Automated attack + report |
-| `rcf report generate -o report.html` | Generate report from findings |
-| `rcf db stats` | Show database statistics |
-| `rcf db export -o data.json` | Export database |
-| `rcf c2 listen` | Start C2 server |
-
-### Examples
-
-```bash
-# Scan entire /24 subnet
-rcf scan -t 192.168.1.0/24 --ports common --threads 100
-
-# Cap targets on a large CIDR to avoid runaway scans
-rcf scan -t 10.0.0.0/8 --max-targets 500
-
-# Accept self-signed certs on a lab target (opt-in, insecure)
-rcf scan -t 192.168.1.100 --ports 443 --dangerous-accept-invalid-certs
-
-# Run auto attack chain with bounded module concurrency
-rcf auto -t 10.10.10.10 -o report.html --max-modules 3
-
-# Generate and save payload
-rcf venom -p reverse_tcp --lhost 10.0.0.1 --lport 4444 -f pe -o shell.exe
-
-# Run specific exploit
-rcf run -m exploit/multi/http/log4shell -t 192.168.1.100 -p 8080
-```
-
-## 🔒 Security
-
-This project has undergone a comprehensive security audit. See [`SECURITY.md`](SECURITY.md) for vulnerability reporting and [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) for findings.
-
-**Key security features:**
-- **TLS validation on by default** — all HTTP clients validate certificates; use `--dangerous-accept-invalid-certs` only for lab targets with self-signed certs
-- **C2 shell metacharacter filter** — `exec` command blocks `;`, `&&`, `||`, `|`, `` ` ``, `$()`, `<`, `>` before the allowlist check, preventing injection chains
-- Meterpreter command allowlist — only explicitly permitted commands execute
-- Automatic credential hashing (Argon2id + random salt); plaintext zeroed from memory via `zeroize` immediately after hashing
-- HTML escaping in all report generation
-- Path validation for file operations
-- Secure temp files via `tempfile` crate
-
-> ⚠️ **Never run RCF as root** unless required (e.g., SYN scanning). Use a sandboxed environment.
-
-## 🧪 Development
-
-```bash
-# Run tests
-cargo test --workspace
-
-# Lint
-cargo clippy --workspace -- -D warnings
-
-# Format
-cargo fmt
-
-# Build release
-cargo build --release -p rcf-cli
-
-# Quick commands (see Makefile)
-make run          # Build and start console
-make scan         # Quick scan localhost
-make venom        # Generate test payload
-```
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for contribution guidelines and [`ARCHITECTURE.md`](ARCHITECTURE.md) for crate dependency graph, module lifecycle, and how to add new modules.
+See [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for detailed audit findings.
 
 ## 📄 License
 
-BSD-3-Clause. See [`LICENSE`](LICENSE) for details.
+BSD-3-Clause.
 
 ## ⚠️ Disclaimer
 
-This framework is designed for **authorized security testing** and **research purposes only**.
-Always obtain proper authorization before testing any systems you do not own.
+Unauthorized use of this tool against systems you do not own or have explicit permission to test is illegal. The developers assume no liability for misuse.
