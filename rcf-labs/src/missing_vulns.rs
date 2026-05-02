@@ -3,21 +3,11 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::LazyLock;
-use std::time::Duration;
 
 use rcf_core::{
     Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOutput, OptionValue, Result,
     Target,
 };
-
-fn build_client(timeout_secs: u64) -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs))
-        .danger_accept_invalid_certs(true)
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap_or_default()
-}
 
 // ─── 1. XSS Scanner (Real HTTP Requests) ─────────────────────────────────────
 
@@ -100,10 +90,14 @@ impl Module for XssScanner {
             .cloned()
             .unwrap_or_else(|| "GET".to_string());
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
+        let dangerous_certs = ctx.is_dangerous_certs();
 
         Box::pin(async move {
             let scheme = if ssl { "https" } else { "http" };
-            let client = build_client(10);
+            let client = rcf_core::evasion::build_http_client(
+                &rcf_core::EvasionConfig::default(),
+                dangerous_certs,
+            );
 
             // XSS payloads with unique markers for detection
             let payloads = vec![
@@ -277,10 +271,14 @@ impl Module for SSTI {
         let uri = ctx.get("TARGET_URI").cloned().unwrap_or_default();
         let param = ctx.get("PARAM").cloned().unwrap_or_default();
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
+        let dangerous_certs = ctx.is_dangerous_certs();
 
         Box::pin(async move {
             let scheme = if ssl { "https" } else { "http" };
-            let client = build_client(10);
+            let client = rcf_core::evasion::build_http_client(
+                &rcf_core::EvasionConfig::default(),
+                dangerous_certs,
+            );
 
             // SSTI payloads for different engines
             let payloads = vec![
@@ -438,10 +436,14 @@ impl Module for Deserialization {
         let uri = ctx.get("TARGET_URI").cloned().unwrap_or_default();
         let param = ctx.get("PARAM").cloned().unwrap_or_default();
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
+        let dangerous_certs = ctx.is_dangerous_certs();
 
         Box::pin(async move {
             let scheme = if ssl { "https" } else { "http" };
-            let client = build_client(10);
+            let client = rcf_core::evasion::build_http_client(
+                &rcf_core::EvasionConfig::default(),
+                dangerous_certs,
+            );
 
             // Deserialization test payloads
             let payloads = vec![
@@ -633,10 +635,14 @@ impl Module for SsrfExploit {
             .cloned()
             .unwrap_or_else(|| "url".to_string());
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
+        let dangerous_certs = ctx.is_dangerous_certs();
 
         Box::pin(async move {
             let scheme = if ssl { "https" } else { "http" };
-            let client = build_client(15);
+            let client = rcf_core::evasion::build_http_client(
+                &rcf_core::EvasionConfig::default(),
+                dangerous_certs,
+            );
 
             // SSRF targets to probe through the vulnerable server
             let targets = vec![

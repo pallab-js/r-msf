@@ -24,6 +24,8 @@ pub use audit::{AuditCategory, AuditEntry, AuditLevel, AuditLogger};
 pub use context::Context;
 pub use error::{RcfError, Result};
 pub use evasion::{EvasionConfig, ProxyConfig, ProxyType, TlsConfig, UserAgentProfile};
+#[cfg(feature = "reqwest")]
+pub use evasion::build_http_client;
 pub use jobs::{Job, JobManager, JobStatus};
 pub use module::{Module, ModuleCategory, ModuleInfo, ModuleType};
 pub use options::{ModuleOption, ModuleOptions, OptionValue};

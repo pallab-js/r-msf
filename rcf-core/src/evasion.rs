@@ -242,3 +242,49 @@ impl Default for EvasionConfig {
         Self::aggressive()
     }
 }
+
+// ─── Central HTTP Client Builder ────────────────────────────────────────────
+
+/// Build a `reqwest::Client` from an `EvasionConfig`.
+///
+/// `accept_invalid_certs` overrides `evasion.tls.accept_invalid_certs` and should
+/// be sourced from `Context::is_dangerous_certs()` so the user's explicit opt-in
+/// is always respected.
+#[cfg(feature = "reqwest")]
+pub fn build_http_client(evasion: &EvasionConfig, accept_invalid_certs: bool) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .danger_accept_invalid_certs(accept_invalid_certs)
+        .redirect(reqwest::redirect::Policy::none());
+
+    if evasion.rotate_ua {
+        builder = builder.user_agent(get_random_agent().user_agent().to_string());
+    }
+
+    if let Some(ref url) = evasion.proxy.proxy_url {
+        if let Ok(proxy) = reqwest::Proxy::all(url) {
+            builder = builder.proxy(proxy);
+        }
+    }
+
+    builder.build().unwrap_or_default()
+}
+
+#[cfg(all(test, feature = "reqwest"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_http_client_returns_client() {
+        let evasion = EvasionConfig::stealth();
+        // Should not panic; accept_invalid_certs=false is the secure default
+        let _client = build_http_client(&evasion, false);
+    }
+
+    #[test]
+    fn test_build_http_client_with_ua_rotation() {
+        let mut evasion = EvasionConfig::aggressive();
+        evasion.rotate_ua = true;
+        let _client = build_http_client(&evasion, false);
+    }
+}

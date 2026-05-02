@@ -8,6 +8,13 @@ use tracing::{info, warn};
 use crate::models::*;
 use crate::schema::*;
 
+/// Helper for `RETURNING id` queries.
+#[derive(QueryableByName)]
+struct IdRow {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    id: String,
+}
+
 /// Embedded migrations — no external migration files needed.
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
@@ -29,7 +36,12 @@ impl RcfDatabase {
         // Check if this is a new database file
         let is_new_file = !std::path::Path::new(path).exists() && path != ":memory:";
 
-        let conn = SqliteConnection::establish(path)?;
+        let mut conn = SqliteConnection::establish(path)?;
+
+        // Enable WAL journal mode for better concurrent read/write performance
+        diesel::sql_query("PRAGMA journal_mode=WAL;")
+            .execute(&mut conn)
+            .ok();
 
         // Set restrictive permissions on new database files (Unix only)
         if is_new_file {
@@ -38,7 +50,7 @@ impl RcfDatabase {
                 use std::os::unix::fs::PermissionsExt;
                 if let Ok(metadata) = std::fs::metadata(path) {
                     let mut perms = metadata.permissions();
-                    perms.set_mode(0o600); // Owner read/write only
+                    perms.set_mode(0o600);
                     let _ = std::fs::set_permissions(path, perms);
                 }
             }
@@ -62,30 +74,74 @@ impl RcfDatabase {
 
     // ─── Hosts ─────────────────────────────────────────────────────────
 
-    /// Add or update a host.
+    /// Add or update a host. Uses a single INSERT ... ON CONFLICT upsert — no SELECT round-trip.
+    /// Returns the host's UUID (existing or newly created).
     pub fn save_host(&mut self, address: &str) -> anyhow::Result<String> {
-        // Check if host exists
-        let existing: Option<Host> = hosts::table
-            .filter(hosts::address.eq(address))
-            .first(&mut self.conn)
-            .optional()?;
+        let new_host = NewHost::new(address);
+        let host_id = new_host.id.clone();
+        let now = chrono::Utc::now().timestamp();
 
-        if let Some(host) = existing {
-            // Update last_seen
-            diesel::update(hosts::table.filter(hosts::id.eq(&host.id)))
-                .set(hosts::last_seen.eq(chrono::Utc::now().timestamp()))
-                .execute(&mut self.conn)?;
-            Ok(host.id)
-        } else {
-            // Insert new host
-            let new_host = NewHost::new(address);
-            let host_id = new_host.id.clone();
-            diesel::insert_into(hosts::table)
-                .values(&new_host)
-                .execute(&mut self.conn)?;
-            info!("Added host: {} ({})", address, host_id);
-            Ok(host_id)
-        }
+        // Single atomic upsert: insert new row or update last_seen on address conflict.
+        // first_seen and id are preserved on conflict.
+        diesel::sql_query(
+            "INSERT INTO hosts (id, address, state, first_seen, last_seen) \
+             VALUES (?1, ?2, 'alive', ?3, ?3) \
+             ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen \
+             RETURNING id"
+        )
+        .bind::<diesel::sql_types::Text, _>(&host_id)
+        .bind::<diesel::sql_types::Text, _>(address)
+        .bind::<diesel::sql_types::BigInt, _>(now)
+        .get_result::<IdRow>(&mut self.conn)
+        .map(|row| row.id)
+        .or_else(|_| {
+            // Fallback: RETURNING not supported on older SQLite — query the id after upsert
+            diesel::sql_query(
+                "INSERT INTO hosts (id, address, state, first_seen, last_seen) \
+                 VALUES (?1, ?2, 'alive', ?3, ?3) \
+                 ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen"
+            )
+            .bind::<diesel::sql_types::Text, _>(&host_id)
+            .bind::<diesel::sql_types::Text, _>(address)
+            .bind::<diesel::sql_types::BigInt, _>(now)
+            .execute(&mut self.conn)?;
+
+            hosts::table
+                .filter(hosts::address.eq(address))
+                .select(hosts::id)
+                .first::<String>(&mut self.conn)
+                .map_err(|e| anyhow::anyhow!(e))
+        })
+    }
+
+    /// Upsert multiple hosts in a single transaction. Returns their UUIDs in order.
+    pub fn save_hosts_batch(&mut self, addresses: &[&str]) -> anyhow::Result<Vec<String>> {
+        self.conn.transaction(|conn| {
+            let now = chrono::Utc::now().timestamp();
+            let mut ids = Vec::with_capacity(addresses.len());
+
+            for address in addresses {
+                let new_host = NewHost::new(address);
+                let host_id = new_host.id.clone();
+
+                diesel::sql_query(
+                    "INSERT INTO hosts (id, address, state, first_seen, last_seen) \
+                     VALUES (?1, ?2, 'alive', ?3, ?3) \
+                     ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen"
+                )
+                .bind::<diesel::sql_types::Text, _>(&host_id)
+                .bind::<diesel::sql_types::Text, _>(*address)
+                .bind::<diesel::sql_types::BigInt, _>(now)
+                .execute(conn)?;
+
+                let id = hosts::table
+                    .filter(hosts::address.eq(*address))
+                    .select(hosts::id)
+                    .first::<String>(conn)?;
+                ids.push(id);
+            }
+            Ok(ids)
+        })
     }
 
     /// Update host OS information.

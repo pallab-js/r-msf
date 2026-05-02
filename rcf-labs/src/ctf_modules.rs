@@ -650,6 +650,7 @@ impl Module for DirBuster {
         let rport = ctx.get_rport();
         let _wordlist = ctx.get("WORDLIST").cloned().unwrap_or_default();
         let ssl = ctx.get("SSL").map(|s| s == "true").unwrap_or(false);
+        let dangerous_certs = ctx.is_dangerous_certs();
 
         Box::pin(async move {
             let scheme = if ssl { "https" } else { "http" };
@@ -709,11 +710,10 @@ impl Module for DirBuster {
                 "dashboard",
             ];
 
-            let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(5))
-                .danger_accept_invalid_certs(true)
-                .build()
-                .unwrap_or_default();
+            let client = rcf_core::evasion::build_http_client(
+                &rcf_core::EvasionConfig::default(),
+                dangerous_certs,
+            );
 
             let mut found = Vec::new();
 

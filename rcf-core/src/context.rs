@@ -19,7 +19,7 @@ pub mod keys {
     pub const VERBOSE: &str = "VERBOSE";
     pub const SSL: &str = "SSL";
     pub const PROXIES: &str = "PROXIES";
-    pub const STRICT_TLS: &str = "STRICT_TLS";
+    pub const DANGEROUS_CERTS: &str = "DANGEROUS_ACCEPT_INVALID_CERTS";
 }
 
 /// The global context holds all shared configuration.
@@ -112,9 +112,11 @@ impl Context {
             .unwrap_or(10)
     }
 
-    /// Get whether strict TLS validation is enabled.
-    pub fn is_strict_tls(&self) -> bool {
-        self.get("STRICT_TLS").map(|s| s == "true").unwrap_or(false)
+    /// Returns true if the user has explicitly opted into accepting invalid TLS certificates.
+    pub fn is_dangerous_certs(&self) -> bool {
+        self.get(keys::DANGEROUS_CERTS)
+            .map(|s| s == "true")
+            .unwrap_or(false)
     }
 
     /// Unset (remove) an option.
@@ -197,6 +199,19 @@ mod tests {
         let ctx = Context::new();
         assert_eq!(ctx.get_lport(), 4444);
     }
+
+    #[test]
+    fn test_tls_secure_by_default() {
+        let ctx = Context::new();
+        assert!(!ctx.is_dangerous_certs(), "TLS must be secure by default");
+    }
+
+    #[test]
+    fn test_dangerous_certs_opt_in() {
+        let mut ctx = Context::new();
+        ctx.set(keys::DANGEROUS_CERTS, "true");
+        assert!(ctx.is_dangerous_certs());
+    }
 }
 
 /// Thread-safe shared context wrapper.
@@ -226,10 +241,11 @@ impl SharedContext {
 #[cfg(feature = "reqwest")]
 impl Context {
     /// Get a new HTTP client for making HTTP requests.
-    /// Uses the current context's TLS settings and proxy from PROXIES option.
+    /// TLS certificate validation is enabled by default.
+    /// Set DANGEROUS_ACCEPT_INVALID_CERTS=true only for targets with self-signed certs.
     pub fn http_client(&self) -> anyhow::Result<reqwest::Client> {
         let mut builder = reqwest::Client::builder()
-            .danger_accept_invalid_certs(!self.is_strict_tls())
+            .danger_accept_invalid_certs(self.is_dangerous_certs())
             .timeout(std::time::Duration::from_secs(30));
 
         // Add proxy from PROXIES option if set

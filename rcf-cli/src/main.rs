@@ -45,9 +45,9 @@ struct Cli {
     #[arg(short = 'c', long)]
     context_file: Option<String>,
 
-    /// Enable TLS certificate validation (default: disabled for pentesting)
+    /// Accept invalid TLS certificates (self-signed, expired). INSECURE — use only against lab targets.
     #[arg(long, global = true)]
-    strict_tls: bool,
+    dangerous_accept_invalid_certs: bool,
 
     /// Run a resource script file and exit
     #[arg(short = 'r', long, global = true)]
@@ -150,6 +150,10 @@ enum Commands {
         /// Output format (text, json, csv)
         #[arg(short, long, default_value = "text")]
         format: String,
+
+        /// Maximum number of targets to scan (caps CIDR expansion)
+        #[arg(long, default_value = "10000")]
+        max_targets: usize,
     },
 
     /// Database operations
@@ -198,6 +202,10 @@ enum Commands {
         /// Aggressive mode (full port scan + all vuln checks)
         #[arg(short, long)]
         aggressive: bool,
+
+        /// Maximum number of modules to run concurrently (default: 5)
+        #[arg(long, default_value = "5")]
+        max_modules: usize,
     },
 
     /// CTF operations (flag tracking, workspace init)
@@ -442,8 +450,8 @@ async fn main() -> anyhow::Result<()> {
     if let Some(lport) = cli.lport {
         context.set("LPORT", &lport.to_string());
     }
-    if cli.strict_tls {
-        context.set("STRICT_TLS", "true");
+    if cli.dangerous_accept_invalid_certs {
+        context.set(rcf_core::context::keys::DANGEROUS_CERTS, "true");
     }
     if cli.verbose {
         context.set("VERBOSE", "true");
@@ -504,8 +512,9 @@ async fn main() -> anyhow::Result<()> {
             threads,
             timeout,
             format,
+            max_targets,
         }) => {
-            run_scan(&target, &ports, threads, timeout, &format).await?;
+            run_scan(&target, &ports, threads, timeout, &format, max_targets).await?;
             return Ok(());
         }
 
@@ -542,7 +551,7 @@ async fn main() -> anyhow::Result<()> {
                 } => {
                     let out_format = format.as_deref().unwrap_or("html");
                     if let Some(t) = target {
-                        run_auto(&t, Some(&output), false).await?;
+                        run_auto(&t, Some(&output), false, 5).await?;
                     }
                     run_report(&ReportCommands::Generate {
                         db: None,
@@ -559,8 +568,9 @@ async fn main() -> anyhow::Result<()> {
             target,
             output,
             aggressive,
+            max_modules,
         }) => {
-            run_auto(&target, output.as_deref(), aggressive).await?;
+            run_auto(&target, output.as_deref(), aggressive, max_modules).await?;
             return Ok(());
         }
 
@@ -963,6 +973,7 @@ async fn run_scan(
     threads: usize,
     timeout: u64,
     format: &str,
+    max_targets: usize,
 ) -> anyhow::Result<()> {
     use colored::Colorize;
     use rcf_core::target::parse_targets;
@@ -970,7 +981,7 @@ async fn run_scan(
     use std::time::Duration;
 
     // Parse targets (supports CIDR, ranges, comma-separated)
-    let targets = parse_targets(target, 80)?;
+    let targets = parse_targets(target, 80, max_targets)?;
     let target_count = targets.len();
 
     println!("{}", "[*] RCF Network Scanner".bold().green());
@@ -1560,7 +1571,7 @@ fn run_report(command: &ReportCommands) -> anyhow::Result<()> {
 }
 
 #[cfg(feature = "db")]
-async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyhow::Result<()> {
+async fn run_auto(target: &str, output: Option<&str>, aggressive: bool, max_modules: usize) -> anyhow::Result<()> {
     use rcf_db::connection::RcfDatabase;
     use rcf_network::scanner::{PortRange, ScanConfig, TcpConnectScanner};
     use std::time::Duration;
@@ -1614,25 +1625,38 @@ async fn run_auto(target: &str, output: Option<&str>, aggressive: bool) -> anyho
 
     // 3. Auto-Run relevant modules based on services
     let services = db.list_services(&host_id)?;
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_modules));
+    let mut handles = Vec::new();
+
     for svc in &services {
         let port = svc.port as u16;
-        let name = svc.name.as_deref().unwrap_or("");
+        let name = svc.name.as_deref().unwrap_or("").to_string();
+        let sem = semaphore.clone();
+        let target_clone = target.to_string();
 
-        match (port, name) {
-            (80, _) | (443, _) | (8080, _) | (8443, _) => {
-                println!("  [*] HTTP detected - running web scanners...");
+        let handle = tokio::spawn(async move {
+            let _permit = sem.acquire().await;
+            match (port, name.as_str()) {
+                (80, _) | (443, _) | (8080, _) | (8443, _) => {
+                    tracing::debug!("HTTP on {}:{} — web scanners queued", target_clone, port);
+                }
+                (21, _) | (2121, _) => {
+                    tracing::debug!("FTP on {}:{} — brute force queued", target_clone, port);
+                }
+                (22, _) => {
+                    tracing::debug!("SSH on {}:{} — login checks queued", target_clone, port);
+                }
+                (445, _) | (139, _) => {
+                    tracing::debug!("SMB on {}:{} — enumeration queued", target_clone, port);
+                }
+                _ => {}
             }
-            (21, _) | (2121, _) => {
-                println!("  [*] FTP detected - running brute force...");
-            }
-            (22, _) => {
-                println!("  [*] SSH detected - running login checks...");
-            }
-            (445, _) | (139, _) => {
-                println!("  [*] SMB detected - running enumeration...");
-            }
-            _ => {}
-        }
+        });
+        handles.push(handle);
+    }
+
+    for h in handles {
+        let _ = h.await;
     }
 
     // 4. Generate Report

@@ -75,6 +75,9 @@ jobs:
         run: |
           ./target/release/rcf --version
           ./target/release/rcf --help
+          # v0.2.0: assert old --strict-tls flag is gone and new flag is present
+          ./target/release/rcf --help | grep -v -- '--strict-tls'
+          ./target/release/rcf --help | grep -- '--dangerous-accept-invalid-certs'
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

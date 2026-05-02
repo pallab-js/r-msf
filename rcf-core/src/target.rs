@@ -75,13 +75,9 @@ impl fmt::Display for Target {
 
 /// Parse a list of targets from a comma-separated string.
 ///
-/// Supports formats:
-/// - `192.168.1.1`
-/// - `192.168.1.1:443`
-/// - `192.168.1.1,192.168.1.2`
-/// - `192.168.1.1-10` (range)
-/// - `192.168.1.0/24` (CIDR notation)
-pub fn parse_targets(input: &str, default_port: u16) -> Result<Vec<Target>> {
+/// `max_targets` caps the total number of targets returned (default: 10000).
+/// Supports: single IPs, `host:port`, comma-separated, IP ranges (`x.x.x.1-10`), CIDR.
+pub fn parse_targets(input: &str, default_port: u16, max_targets: usize) -> Result<Vec<Target>> {
     let mut targets = Vec::new();
 
     for part in input.split(',') {
@@ -90,9 +86,14 @@ pub fn parse_targets(input: &str, default_port: u16) -> Result<Vec<Target>> {
             continue;
         }
 
+        if targets.len() >= max_targets {
+            break;
+        }
+
         // Handle CIDR notation
         if part.contains('/') {
-            let cidr_hosts = parse_cidr(part, default_port)?;
+            let remaining = max_targets - targets.len();
+            let cidr_hosts = parse_cidr(part, default_port, remaining)?;
             targets.extend(cidr_hosts);
             continue;
         }
@@ -104,8 +105,10 @@ pub fn parse_targets(input: &str, default_port: u16) -> Result<Vec<Target>> {
             && let Ok(end) = last_octet.parse::<u8>()
         {
             for i in start..=end.min(254) {
-                let host = format!("{}.{}", prefix, i);
-                targets.push(Target::new(&host, default_port));
+                if targets.len() >= max_targets {
+                    break;
+                }
+                targets.push(Target::new(&format!("{}.{}", prefix, i), default_port));
             }
             continue;
         }
@@ -116,8 +119,40 @@ pub fn parse_targets(input: &str, default_port: u16) -> Result<Vec<Target>> {
     Ok(targets)
 }
 
-/// Parse CIDR notation (e.g., "192.168.1.0/24") into a list of targets.
-pub fn parse_cidr(cidr: &str, default_port: u16) -> Result<Vec<Target>> {
+/// Lazy iterator over IPv4 addresses in a CIDR block.
+pub struct CidrIter {
+    network_addr: u32,
+    current: u32,
+    end: u32,
+    port: u16,
+}
+
+impl CidrIter {
+    fn new(network_addr: u32, num_hosts: u32, port: u16) -> Self {
+        Self {
+            network_addr,
+            current: 1, // skip network address (.0)
+            end: num_hosts.saturating_sub(1), // skip broadcast
+            port,
+        }
+    }
+}
+
+impl Iterator for CidrIter {
+    type Item = Target;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current >= self.end {
+            return None;
+        }
+        let addr = self.network_addr + self.current;
+        self.current += 1;
+        Some(Target::new(&Ipv4Addr::from(addr).to_string(), self.port))
+    }
+}
+
+/// Parse CIDR notation into a lazy iterator, collecting up to `max_targets` hosts.
+pub fn parse_cidr(cidr: &str, default_port: u16, max_targets: usize) -> Result<Vec<Target>> {
     let parts: Vec<&str> = cidr.splitn(2, '/').collect();
     if parts.len() != 2 {
         return Err(RcfError::InvalidOption {
@@ -143,31 +178,13 @@ pub fn parse_cidr(cidr: &str, default_port: u16) -> Result<Vec<Target>> {
         });
     }
 
-    let network_bits = 32 - prefix_len;
-    let num_hosts = 2u32.pow(network_bits as u32);
+    let network_bits = 32 - prefix_len as u32;
+    let num_hosts = 1u32.checked_shl(network_bits).unwrap_or(u32::MAX);
+    let network_addr = u32::from(ip) & !(num_hosts - 1);
 
-    // Limit to reasonable size to prevent abuse
-    if num_hosts > 65536 {
-        return Err(RcfError::InvalidOption {
-            name: "cidr".to_string(),
-            reason: "CIDR range too large (max /16)".to_string(),
-        });
-    }
-
-    let network_addr = u32::from(ip) & (!((1u32 << network_bits) - 1));
-
-    let mut targets = Vec::with_capacity(num_hosts as usize);
-    for i in 0..num_hosts {
-        let addr = network_addr + i;
-        let ip = Ipv4Addr::from(addr);
-        // Skip network and broadcast addresses
-        if i == 0 || i == num_hosts - 1 {
-            continue;
-        }
-        targets.push(Target::new(&ip.to_string(), default_port));
-    }
-
-    Ok(targets)
+    Ok(CidrIter::new(network_addr, num_hosts, default_port)
+        .take(max_targets)
+        .collect())
 }
 
 #[cfg(test)]
@@ -176,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_parse_cidr_30() {
-        let targets = parse_cidr("192.168.1.0/30", 80).unwrap();
+        let targets = parse_cidr("192.168.1.0/30", 80, 10000).unwrap();
         assert_eq!(targets.len(), 2); // .1 and .2
         assert_eq!(targets[0].host, "192.168.1.1");
         assert_eq!(targets[1].host, "192.168.1.2");
@@ -184,18 +201,31 @@ mod tests {
 
     #[test]
     fn test_parse_cidr_24() {
-        let targets = parse_cidr("10.0.0.0/24", 80).unwrap();
-        assert_eq!(targets.len(), 254); // .1 through .254
+        let targets = parse_cidr("10.0.0.0/24", 80, 10000).unwrap();
+        assert_eq!(targets.len(), 254);
         assert_eq!(targets[0].host, "10.0.0.1");
         assert_eq!(targets[253].host, "10.0.0.254");
     }
 
     #[test]
+    fn test_parse_cidr_large_capped() {
+        // /8 would be 16M hosts — max_targets=5 must cap it without OOM
+        let targets = parse_cidr("10.0.0.0/8", 80, 5).unwrap();
+        assert_eq!(targets.len(), 5);
+    }
+
+    #[test]
     fn test_parse_targets_mixed() {
-        let targets = parse_targets("192.168.1.1,10.0.0.0/30", 80).unwrap();
-        assert_eq!(targets.len(), 3); // 1 single + 2 from /30
+        let targets = parse_targets("192.168.1.1,10.0.0.0/30", 80, 10000).unwrap();
+        assert_eq!(targets.len(), 3);
         assert_eq!(targets[0].host, "192.168.1.1");
         assert_eq!(targets[1].host, "10.0.0.1");
         assert_eq!(targets[2].host, "10.0.0.2");
+    }
+
+    #[test]
+    fn test_parse_targets_max_targets_cap() {
+        let targets = parse_targets("10.0.0.0/24", 80, 10).unwrap();
+        assert_eq!(targets.len(), 10);
     }
 }
