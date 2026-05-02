@@ -145,7 +145,7 @@ impl C2Server {
         use subtle::ConstantTimeEq;
         if let Some(expected_psk) = psk {
             let psk_equal = provided_psk.as_bytes().ct_eq(expected_psk.as_bytes());
-            if bool::from(psk_equal) {
+            if !bool::from(psk_equal) {
                 warn!("PSK mismatch from {}: invalid key provided", peer_addr);
                 socket.write_all(b"AUTH_FAILED\n").await?;
                 anyhow::bail!("PSK mismatch");
@@ -197,17 +197,21 @@ impl C2Server {
             .control_port
             .unwrap_or(self.config.listen_port + 1);
         let sessions_clone = Arc::clone(&self.sessions);
-        let control_addr = format!("{}:{}", self.config.listen_addr, control_port);
-        let listen_addr = self.config.listen_addr.clone();
+        let control_addr = format!("127.0.0.1:{}", control_port);
+        let psk_for_control = self.config.psk.clone();
         info!(
-            "C2 control server listening on {} (for console interaction)",
+            "C2 control server listening on {} (loopback only)",
             control_addr
         );
 
         let _control_handle = tokio::spawn(async move {
-            if let Err(e) =
-                crate::control::start_control_server(&listen_addr, control_port, sessions_clone)
-                    .await
+            if let Err(e) = crate::control::start_control_server_with_psk(
+                "127.0.0.1",
+                control_port,
+                sessions_clone,
+                psk_for_control,
+            )
+            .await
             {
                 error!("Control server error: {}", e);
             }

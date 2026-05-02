@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
@@ -42,8 +42,8 @@ jobs:
 
       - name: Security audit
         run: |
-          cargo install cargo-audit --locked || true
-          cargo audit --locked || true
+          cargo install cargo-audit --locked
+          cargo audit
 
       - name: Tests
         run: cargo test --workspace
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo
         uses: actions/cache@v4

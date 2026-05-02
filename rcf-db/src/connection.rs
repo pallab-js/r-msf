@@ -43,6 +43,11 @@ impl RcfDatabase {
             .execute(&mut conn)
             .ok();
 
+        // Enforce foreign key constraints — SQLite disables them by default.
+        diesel::sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut conn)
+            .ok();
+
         // Set restrictive permissions on new database files (Unix only)
         if is_new_file {
             #[cfg(unix)]
@@ -87,7 +92,7 @@ impl RcfDatabase {
             "INSERT INTO hosts (id, address, state, first_seen, last_seen) \
              VALUES (?1, ?2, 'alive', ?3, ?3) \
              ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen \
-             RETURNING id"
+             RETURNING id",
         )
         .bind::<diesel::sql_types::Text, _>(&host_id)
         .bind::<diesel::sql_types::Text, _>(address)
@@ -99,7 +104,7 @@ impl RcfDatabase {
             diesel::sql_query(
                 "INSERT INTO hosts (id, address, state, first_seen, last_seen) \
                  VALUES (?1, ?2, 'alive', ?3, ?3) \
-                 ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen"
+                 ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen",
             )
             .bind::<diesel::sql_types::Text, _>(&host_id)
             .bind::<diesel::sql_types::Text, _>(address)
@@ -127,7 +132,7 @@ impl RcfDatabase {
                 diesel::sql_query(
                     "INSERT INTO hosts (id, address, state, first_seen, last_seen) \
                      VALUES (?1, ?2, 'alive', ?3, ?3) \
-                     ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen"
+                     ON CONFLICT(address) DO UPDATE SET last_seen = excluded.last_seen",
                 )
                 .bind::<diesel::sql_types::Text, _>(&host_id)
                 .bind::<diesel::sql_types::Text, _>(*address)
@@ -172,20 +177,20 @@ impl RcfDatabase {
         Ok(result)
     }
 
-    /// Delete a host and all related data.
+    /// Delete a host and all related data atomically.
     pub fn delete_host(&mut self, host_id: &str) -> anyhow::Result<()> {
-        // Delete related records first (SQLite doesn't have cascading by default)
-        diesel::delete(services::table.filter(services::host_id.eq(host_id)))
-            .execute(&mut self.conn)?;
-        diesel::delete(credentials::table.filter(credentials::host_id.eq(host_id)))
-            .execute(&mut self.conn)?;
-        diesel::delete(vulnerabilities::table.filter(vulnerabilities::host_id.eq(host_id)))
-            .execute(&mut self.conn)?;
-        diesel::delete(sessions::table.filter(sessions::host_id.eq(host_id)))
-            .execute(&mut self.conn)?;
-        diesel::delete(loot::table.filter(loot::host_id.eq(host_id))).execute(&mut self.conn)?;
-        diesel::delete(hosts::table.filter(hosts::id.eq(host_id))).execute(&mut self.conn)?;
-        Ok(())
+        let host_id = host_id.to_string();
+        self.conn.transaction(|conn| {
+            diesel::delete(services::table.filter(services::host_id.eq(&host_id))).execute(conn)?;
+            diesel::delete(credentials::table.filter(credentials::host_id.eq(&host_id)))
+                .execute(conn)?;
+            diesel::delete(vulnerabilities::table.filter(vulnerabilities::host_id.eq(&host_id)))
+                .execute(conn)?;
+            diesel::delete(sessions::table.filter(sessions::host_id.eq(&host_id))).execute(conn)?;
+            diesel::delete(loot::table.filter(loot::host_id.eq(&host_id))).execute(conn)?;
+            diesel::delete(hosts::table.filter(hosts::id.eq(&host_id))).execute(conn)?;
+            Ok(())
+        })
     }
 
     // ─── Services ──────────────────────────────────────────────────────

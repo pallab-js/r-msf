@@ -49,7 +49,7 @@ We follow a coordinated disclosure model. Please do not publicly disclose securi
 
 1. **Never run RCF as root** unless absolutely necessary (e.g., SYN scanning requires raw sockets)
 2. **Use a sandboxed environment** — Run RCF in a VM or container when testing untrusted targets
-3. **Enable `--strict-tls`** when scanning production or sensitive systems
+3. **TLS validation is on by default** — all HTTP clients validate certificates. Only use `--dangerous-accept-invalid-certs` against lab targets with self-signed certificates
 4. **Regularly update** — Keep your RCF installation up to date with the latest security patches
 5. **Review generated reports** — HTML reports are escaped, but always verify before sharing
 6. **Protect your database** — The SQLite file (`rcf.db`) may contain discovered credentials

@@ -3,6 +3,7 @@
 //! Protocol:
 //! 1. Agent connects to C2 server (TCP)
 //! 2. Agent sends greeting: "RCF_AGENT_V1:<psk>\n"
+#![allow(clippy::collapsible_match)]
 //! 3. C2 responds: "RCF_AUTH_SUCCESS\n" or "AUTH_FAILED\n"
 //! 4. Agent sends sysinfo JSON: "RCF_SYSINFO\n{...}\nRCF_SYSINFO_END\n"
 //! 5. Command loop:
