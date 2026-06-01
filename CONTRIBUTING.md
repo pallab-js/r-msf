@@ -58,7 +58,7 @@ Feature suggestions are welcome! Please include:
 - **Description:** What, why, and how
 - **Testing:** Confirm tests pass (`cargo test --workspace`)
 - **Linting:** Confirm clean clippy run (`cargo clippy --workspace -- -D warnings`)
-- **Documentation:** Update `QWEN.md`, `README.md`, or inline docs as needed
+- **Documentation:** Update `README.md`, `ARCHITECTURE.md`, or inline docs as needed
 
 ## Coding Conventions
 
@@ -162,7 +162,7 @@ Releases follow semantic versioning (0.1.0, 0.2.0, etc.):
 
 - **GitHub Issues:** Bug reports, feature requests
 - **GitHub Discussions:** Questions, ideas, community chat
-- **QWEN.md:** Project documentation and context
+- **ARCHITECTURE.md:** Project architecture documentation
 
 ## Recognition
 

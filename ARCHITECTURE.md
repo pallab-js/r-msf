@@ -55,14 +55,14 @@ register → check → run → output
 ```rust
 use std::pin::Pin;
 use std::future::Future;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use rcf_core::{Context, Module, ModuleCategory, ModuleInfo, ModuleOptions, ModuleOption, Target};
 use rcf_core::output::ModuleOutput;
 use rcf_core::error::Result;
 
 pub struct MyExploit;
 
-static INFO: Lazy<ModuleInfo> = Lazy::new(|| ModuleInfo {
+static INFO: LazyLock<ModuleInfo> = LazyLock::new(|| ModuleInfo {
     name: "exploit/http/my_exploit".to_string(),
     display_name: "My Exploit".to_string(),
     description: "Does something useful".to_string(),

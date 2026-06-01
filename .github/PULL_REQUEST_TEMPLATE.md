@@ -34,7 +34,7 @@ cargo clippy --workspace -- -D warnings
 
 - [ ] My code follows the project's coding conventions
 - [ ] I have added comments to my code where necessary
-- [ ] I have updated the documentation (QWEN.md, README.md, etc.) if needed
+- [ ] I have updated the documentation (README.md, ARCHITECTURE.md, etc.) if needed
 - [ ] I have added tests that prove my fix/feature works
 - [ ] All new and existing tests pass
 - [ ] My changes do not introduce new security vulnerabilities
