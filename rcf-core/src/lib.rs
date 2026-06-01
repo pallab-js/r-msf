@@ -6,13 +6,16 @@
 pub mod anonymity;
 pub mod audit;
 pub mod context;
+pub mod crypto;
 pub mod error;
 pub mod evasion;
+pub mod integrity;
 pub mod jobs;
 pub mod module;
 pub mod msf_compat;
 pub mod options;
 pub mod output;
+pub mod policy;
 pub mod target;
 
 pub use anonymity::{

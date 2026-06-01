@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
 
+use crate::auth::{AuthMethod, AuthResult, C2Auth};
 use crate::handler::SessionHandler;
 use crate::session::{SessionCommand, SessionManager, SessionType};
 
@@ -60,8 +61,12 @@ pub struct C2Config {
     pub max_sessions: usize,
     pub heartbeat_interval_secs: u64,
     pub shutdown_timeout_secs: u64,
-    /// Pre-shared key for agent authentication (optional but recommended)
+    /// Pre-shared key for agent authentication (optional, legacy v0.2 compat)
     pub psk: Option<String>,
+    /// Whether to use legacy PSK-only mode (v0.2 compat)
+    pub legacy_psk: bool,
+    /// Path to authorized keys directory
+    pub authorized_keys_dir: Option<String>,
     /// Enable TLS for encrypted connections
     pub use_tls: bool,
     /// Control port for console interaction (None = listen_port + 1)
@@ -77,6 +82,8 @@ impl C2Config {
             heartbeat_interval_secs: 30,
             shutdown_timeout_secs: 10,
             psk: None,
+            legacy_psk: false,
+            authorized_keys_dir: None,
             use_tls: false,
             control_port: None,
         }
@@ -85,6 +92,12 @@ impl C2Config {
     /// Set a pre-shared key for agent authentication.
     pub fn with_psk(mut self, psk: String) -> Self {
         self.psk = Some(psk);
+        self
+    }
+
+    /// Enable legacy PSK-only mode.
+    pub fn with_legacy_psk(mut self) -> Self {
+        self.legacy_psk = true;
         self
     }
 
@@ -107,56 +120,8 @@ pub struct AuthenticatedSession {
     pub session_num: u32,
     pub peer_addr: SocketAddr,
     pub authenticated_at: i64,
-}
-
-impl C2Server {
-    /// Authenticate an incoming connection using PSK verification.
-    /// Returns Ok(()) if authenticated or auth is not required.
-    /// Returns Err(reason) if authentication fails.
-    async fn authenticate_connection(
-        socket: &mut tokio::net::TcpStream,
-        peer_addr: SocketAddr,
-        psk: &Option<String>,
-    ) -> anyhow::Result<()> {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let mut buf = [0u8; 256];
-
-        // Read initial message from agent
-        let n = socket.read(&mut buf).await?;
-        if n == 0 {
-            anyhow::bail!("Connection closed during authentication");
-        }
-
-        let client_msg = String::from_utf8_lossy(&buf[..n]);
-        let client_msg = client_msg.trim();
-
-        // Check for expected agent greeting prefix
-        if !client_msg.starts_with("RCF_AGENT_V1:") {
-            warn!("Invalid agent greeting from {}: {}", peer_addr, client_msg);
-            socket.write_all(b"INVALID_AGENT\n").await?;
-            anyhow::bail!("Invalid agent greeting");
-        }
-
-        // Extract PSK from greeting: "RCF_AGENT_V1:<psk>"
-        let provided_psk = &client_msg["RCF_AGENT_V1:".len()..];
-
-        // Verify PSK if configured - use constant-time comparison to prevent timing attacks
-        use subtle::ConstantTimeEq;
-        if let Some(expected_psk) = psk {
-            let psk_equal = provided_psk.as_bytes().ct_eq(expected_psk.as_bytes());
-            if !bool::from(psk_equal) {
-                warn!("PSK mismatch from {}: invalid key provided", peer_addr);
-                socket.write_all(b"AUTH_FAILED\n").await?;
-                anyhow::bail!("PSK mismatch");
-            }
-        }
-
-        info!("Agent {} authenticated successfully", peer_addr);
-        socket.write_all(b"RCF_AUTH_SUCCESS\n").await?;
-
-        Ok(())
-    }
+    pub auth_method: AuthMethod,
+    pub session_token: Option<[u8; 32]>,
 }
 
 /// The main C2 server.
@@ -166,10 +131,56 @@ pub struct C2Server {
     running: Arc<tokio::sync::Notify>,
     shutdown_triggered: Arc<std::sync::atomic::AtomicBool>,
     rate_limiter: SlidingWindowRateLimiter,
+    auth: Arc<C2Auth>,
 }
 
 impl C2Server {
     pub fn new(config: C2Config, sessions: Arc<SessionManager>) -> Self {
+        // Build the authenticator based on config
+        let auth = if config.legacy_psk {
+            let psk = config.psk.clone().unwrap_or_default();
+            C2Auth::with_psk(psk)
+        } else if let Some(ref psk) = config.psk {
+            // Migration mode: PSK + Ed25519
+            let keys = crate::auth::AuthorizedKeys::new();
+            if let Some(ref dir) = config.authorized_keys_dir {
+                let keys_clone = keys.clone();
+                let dir_path = std::path::Path::new(dir);
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        match keys_clone.load_from_dir(dir_path).await {
+                            Ok(count) => {
+                                if count > 0 {
+                                    info!("Loaded {} authorized keys from {}", count, dir);
+                                }
+                            }
+                            Err(e) => warn!("Failed to load authorized keys: {}", e),
+                        }
+                    });
+                });
+            }
+            C2Auth::with_both(psk.clone(), keys)
+        } else {
+            let keys = crate::auth::AuthorizedKeys::new();
+            if let Some(ref dir) = config.authorized_keys_dir {
+                let keys_clone = keys.clone();
+                let dir_path = std::path::Path::new(dir);
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        match keys_clone.load_from_dir(dir_path).await {
+                            Ok(count) => {
+                                if count > 0 {
+                                    info!("Loaded {} authorized keys from {}", count, dir);
+                                }
+                            }
+                            Err(e) => warn!("Failed to load authorized keys: {}", e),
+                        }
+                    });
+                });
+            }
+            C2Auth::with_authorized_keys(keys)
+        };
+
         Self {
             config,
             sessions,
@@ -177,7 +188,12 @@ impl C2Server {
             shutdown_triggered: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             // Sliding window: 100 connections per 60 seconds
             rate_limiter: SlidingWindowRateLimiter::new(Duration::from_secs(60), 100),
+            auth: Arc::new(auth),
         }
+    }
+
+    pub fn auth(&self) -> &Arc<C2Auth> {
+        &self.auth
     }
 
     /// Start the C2 server listener.
@@ -185,9 +201,17 @@ impl C2Server {
         let addr = format!("{}:{}", self.config.listen_addr, self.config.listen_port);
         let listener = TcpListener::bind(&addr).await?;
 
+        let auth_method = if self.config.legacy_psk {
+            "psk (legacy)"
+        } else if self.config.psk.is_some() {
+            "ed25519 + psk (migration)"
+        } else {
+            "ed25519"
+        };
+
         info!(
             addr = %addr,
-            psk_configured = self.config.psk.is_some(),
+            auth_method = %auth_method,
             "C2 server listening for connections"
         );
 
@@ -235,7 +259,6 @@ impl C2Server {
                             // Rate limiting using sliding window
                             if !self.rate_limiter.allow().await {
                                 warn!("Rate limiting connection from {} (too many connections in window)", peer_addr);
-                                // Silently drop — don't waste resources on rate-limited connections
                                 continue;
                             }
 
@@ -248,8 +271,8 @@ impl C2Server {
                             info!("New connection from {}", peer_addr);
 
                             // Authenticate connection
-                            let psk = self.config.psk.clone();
-                            if let Err(e) = Self::authenticate_connection(&mut socket, peer_addr, &psk).await {
+                            let auth = Arc::clone(&self.auth);
+                            if let Err(e) = Self::authenticate_connection(&mut socket, peer_addr, &auth).await {
                                 warn!("Connection from {} failed authentication: {}", peer_addr, e);
                                 continue;
                             }
@@ -270,6 +293,55 @@ impl C2Server {
         }
 
         Ok(())
+    }
+
+    /// Authenticate an incoming connection using the configured auth method.
+    async fn authenticate_connection(
+        socket: &mut tokio::net::TcpStream,
+        peer_addr: SocketAddr,
+        auth: &C2Auth,
+    ) -> anyhow::Result<AuthResult> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let peer_str = peer_addr.to_string();
+
+        // For Ed25519 auth, first issue a challenge
+        if !auth.is_legacy_mode() {
+            let nonce = auth.issue_challenge(&peer_str).await;
+            // Send challenge to agent: "RCF_CHALLENGE:<nonce_hex>\n"
+            let challenge_msg = format!("RCF_CHALLENGE:{}\n", hex::encode(nonce));
+            socket.write_all(challenge_msg.as_bytes()).await?;
+        }
+
+        // Read initial greeting from agent
+        let mut buf = [0u8; 512];
+        let n = socket.read(&mut buf).await?;
+        if n == 0 {
+            anyhow::bail!("Connection closed during authentication");
+        }
+
+        // Verify agent response
+        let result = auth.verify_agent(&peer_str, &buf[..n]).await;
+
+        if result.success {
+            info!(
+                "Agent {} authenticated successfully (method: {})",
+                peer_addr, result.method
+            );
+            socket.write_all(b"RCF_AUTH_SUCCESS\n").await?;
+            Ok(result)
+        } else {
+            warn!(
+                "Authentication failed from {}: {}",
+                peer_addr,
+                result.reason.as_deref().unwrap_or("unknown")
+            );
+            socket.write_all(b"AUTH_FAILED\n").await?;
+            anyhow::bail!(
+                "Authentication failed: {}",
+                result.reason.unwrap_or_default()
+            );
+        }
     }
 
     /// Perform graceful shutdown of all sessions.

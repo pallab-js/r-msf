@@ -73,6 +73,10 @@ enum Commands {
         #[arg(short = 'p', long, default_value = "80")]
         port: u16,
 
+        /// Bypass policy enforcement (logs warning)
+        #[arg(long)]
+        no_policy: bool,
+
         /// Additional options as KEY=VALUE pairs
         #[arg(last = true)]
         options: Vec<String>,
@@ -215,6 +219,12 @@ enum Commands {
         command: CtfCommands,
     },
 
+    /// OpenSec policy management
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommands,
+    },
+
     /// Anonymity configuration and operations
     Anon {
         /// Configure anonymity level
@@ -326,6 +336,30 @@ enum DbCommands {
 }
 
 #[derive(Subcommand)]
+enum PolicyCommands {
+    /// Check if a module is allowed by policy
+    Check {
+        /// Module name to check
+        #[arg(short, long)]
+        module: String,
+        /// Target host (IP)
+        #[arg(short = 't', long)]
+        target: String,
+        /// Operator identity
+        #[arg(short, long)]
+        operator: Option<String>,
+    },
+    /// Show current policy configuration
+    Show,
+    /// Initialize default policy file
+    Init {
+        /// Policy file path (default: ~/.rcf/opensec/policies.toml)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 #[cfg(feature = "c2")]
 enum C2Commands {
     /// Start C2 server listener
@@ -433,6 +467,29 @@ async fn main() -> anyhow::Result<()> {
         )
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| filter.into()))
         .init();
+
+    // P0-3: Verify binary integrity at startup
+    match rcf_core::integrity::verify_binary_integrity() {
+        rcf_core::integrity::IntegrityStatus::Pass => {
+            tracing::debug!("Binary integrity check passed");
+        }
+        rcf_core::integrity::IntegrityStatus::Fail(reason) => {
+            eprintln!(
+                "{}",
+                format!("[!] INTEGRITY CHECK FAILED: {}", reason)
+                    .red()
+                    .bold()
+            );
+            eprintln!(
+                "{}",
+                "[!] The binary may be compromised. Exiting.".red().bold()
+            );
+            std::process::exit(1);
+        }
+        rcf_core::integrity::IntegrityStatus::NotApplicable(reason) => {
+            tracing::warn!("Binary integrity check skipped: {}", reason);
+        }
+    }
 
     // Build module registry
     let mut registry = ModuleRegistry::new();
@@ -613,9 +670,32 @@ async fn main() -> anyhow::Result<()> {
             module,
             target,
             port,
+            no_policy,
             options,
         }) => {
+            if !no_policy {
+                if let Err(e) = check_policy_before_run(&module, &target, port).await {
+                    eprintln!("{}", format!("[!] POLICY BLOCKED: {}", e).red().bold());
+                    eprintln!(
+                        "{}",
+                        "[!] Use --no-policy to bypass (not recommended for production)".yellow()
+                    );
+                    return Ok(());
+                }
+            } else {
+                tracing::warn!(
+                    "Policy enforcement bypassed for module '{}' on {}:{}",
+                    module,
+                    target,
+                    port
+                );
+            }
             run_module_non_interactive(&manager, &module, &target, port, &options).await?;
+            return Ok(());
+        }
+
+        Some(Commands::Policy { command }) => {
+            handle_policy_command(command).await?;
             return Ok(());
         }
 
@@ -2042,6 +2122,167 @@ async fn run_anonymity(
     }
 
     Ok(())
+}
+
+// ── Policy Engine Helpers ──────────────────────────────────────────────────────
+
+/// Load the policy engine from the default policy file.
+/// Returns a permissive engine if no policy file exists.
+fn load_policy_engine() -> rcf_core::policy::PolicyEngine {
+    let policy_dir = dirs::home_dir()
+        .map(|p| p.join(".rcf").join("opensec"))
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/.rcf/opensec"));
+
+    let policy_path = policy_dir.join("policies.toml");
+
+    if policy_path.exists() {
+        match rcf_core::policy::PolicyEngine::from_file(&policy_path) {
+            Ok(engine) => {
+                tracing::info!("Loaded policy from {}", policy_path.display());
+                return engine;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to load policy from {}: {}",
+                    policy_path.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    tracing::warn!(
+        "No policy file found at {}, using permissive default",
+        policy_path.display()
+    );
+    rcf_core::policy::PolicyEngine::permissive()
+}
+
+/// Check policy before running a module. Returns Ok if allowed, Err with reason if denied.
+async fn check_policy_before_run(
+    module_name: &str,
+    target_host: &str,
+    target_port: u16,
+) -> anyhow::Result<()> {
+    let engine = load_policy_engine();
+    let target = rcf_core::Target::new(target_host, target_port);
+    let operator = std::env::var("USER").ok();
+
+    let decision = engine.validate(module_name, &target, operator.as_deref());
+
+    match decision {
+        rcf_core::policy::PolicyDecision::Allowed => {
+            tracing::debug!("Policy allowed: {} on {}", module_name, target);
+            Ok(())
+        }
+        rcf_core::policy::PolicyDecision::Denied(ref reason) => {
+            anyhow::bail!("{}", reason)
+        }
+        rcf_core::policy::PolicyDecision::NoMatch => {
+            anyhow::bail!(
+                "No matching policy rule for module '{}' on target '{}' (default: deny)",
+                module_name,
+                target
+            )
+        }
+    }
+}
+
+/// Handle the `policy` CLI subcommand.
+async fn handle_policy_command(command: PolicyCommands) -> anyhow::Result<()> {
+    match command {
+        PolicyCommands::Check {
+            module,
+            target,
+            operator,
+        } => {
+            let engine = load_policy_engine();
+            // Parse target as "host:port" or just "host"
+            let (host, port) = if let Some((h, p)) = target.split_once(':') {
+                (h.to_string(), p.parse::<u16>().unwrap_or(80))
+            } else {
+                (target.clone(), 80)
+            };
+            let target_obj = rcf_core::Target::new(&host, port);
+            let decision = engine.validate(&module, &target_obj, operator.as_deref());
+
+            match &decision {
+                rcf_core::policy::PolicyDecision::Allowed => {
+                    println!("{}", "[+] ALLOWED".bold().green());
+                }
+                rcf_core::policy::PolicyDecision::Denied(reason) => {
+                    println!("{}", "[!] DENIED".red().bold());
+                    println!("  Reason: {}", reason);
+                }
+                rcf_core::policy::PolicyDecision::NoMatch => {
+                    println!("{}", "[!] NO MATCHING RULE (default: deny)".yellow().bold());
+                }
+            }
+
+            // Log to audit
+            let audit_logger = rcf_core::audit::AuditLogger::new();
+            let entry = engine.to_audit_entry(&decision, &module, &target_obj);
+            audit_logger.log(entry).await;
+
+            if decision.is_allowed() {
+                Ok(())
+            } else {
+                anyhow::bail!("Policy check failed")
+            }
+        }
+        PolicyCommands::Show => {
+            let engine = load_policy_engine();
+            let config = engine.config();
+            println!("{}", "Policy Configuration".bold());
+            println!("  Enabled: {}", config.enabled);
+            println!("  Default action: {}", config.default_action);
+            println!("  Rules: {}", config.rules.len());
+            for (i, rule) in config.rules.iter().enumerate() {
+                println!();
+                println!("  Rule #{}:", i + 1);
+                println!("    Action: {}", rule.action);
+                println!("    Modules: {:?}", rule.modules);
+                println!("    Targets: {:?}", rule.targets);
+                if let Some(ref reason) = rule.reason {
+                    println!("    Reason: {}", reason);
+                }
+            }
+            Ok(())
+        }
+        PolicyCommands::Init { output } => {
+            let default_path = output.unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|p| {
+                        p.join(".rcf")
+                            .join("opensec")
+                            .join("policies.toml")
+                            .to_string_lossy()
+                            .to_string()
+                    })
+                    .unwrap_or_else(|| "policies.toml".to_string())
+            });
+
+            let path = std::path::Path::new(&default_path);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| anyhow::anyhow!("Failed to create policy directory: {}", e))?;
+            }
+
+            let toml = rcf_core::policy::PolicyEngine::default_policy_toml();
+            std::fs::write(path, &toml)
+                .map_err(|e| anyhow::anyhow!("Failed to write policy file: {}", e))?;
+
+            println!(
+                "{}",
+                format!("[+] Default policy written to {}", default_path)
+                    .bold()
+                    .green()
+            );
+            println!("  Edit this file to customize policy rules, then run:");
+            println!("  rcf policy check -m scanner/tcp_syn -t 10.0.0.1");
+            Ok(())
+        }
+    }
 }
 
 fn parse_proxy(s: &str) -> Option<ProxyServer> {

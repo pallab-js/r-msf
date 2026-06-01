@@ -18,5 +18,12 @@ uuid = { version = "1", features = ["v4", "serde"] }
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"
 regex = "1"
-rand = "0.9"
+rand = { workspace = true }
+getrandom = { workspace = true }
 reqwest = { version = "0.12", features = ["rustls-tls"], optional = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+ed25519 = { workspace = true }
+hkdf = { workspace = true }
+pkcs8 = { workspace = true }
+zeroize = { workspace = true }
