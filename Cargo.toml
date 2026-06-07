@@ -46,7 +46,7 @@ thiserror = "2"
 anyhow = "1"
 
 # Database (Phase 4)
-diesel = { version = "2.3.8", features = ["sqlite"] }
+diesel = { version = "2.3.10", features = ["sqlite"] }
 libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 
 # Cryptography for credential hashing
