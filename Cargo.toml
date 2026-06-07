@@ -60,7 +60,7 @@ zeroize = { version = "1", features = ["derive"] }
 # Signatures and key exchange (P0-2, P0-3)
 ed25519-dalek = { version = "2", features = ["pkcs8", "pem"] }
 ed25519 = { version = "2", features = ["pkcs8"] }
-hkdf = "0.12"
+hkdf = "0.13"
 pkcs8 = { version = "0.10", features = ["pem"] }
 
 # Networking (Phase 2)
