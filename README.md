@@ -1,15 +1,13 @@
 # Rust Cybersecurity Framework (RCF) v0.3.0
 
 [![CI](https://github.com/pallab-js/r-msf/actions/workflows/ci.yml/badge.svg)](https://github.com/pallab-js/r-msf/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-BSD-3-Clause-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-edition-orange.svg)](https://www.rust-lang.org)
 [![Version](https://img.shields.io/badge/version-0.3.0-green.svg)](CHANGELOG.md)
 
-> **Fast. Memory-Safe. Secure by Default. OpenSec Compliant.**
+**Fast. Memory-Safe. Secure by Default. OpenSec Compliant.**
 
----
-
-RCF is a lightweight, high-performance penetration testing framework written in Rust. Purpose-built for Linux security assessments, it provides 60+ pre-built modules for network reconnaissance, exploitation, and post-exploitation — with cryptographic integrity guarantees and policy-driven execution controls aligned with OpenSec principles.
+RCF is a lightweight, high-performance penetration testing framework written in Rust. Provides 60+ pre-built modules for network reconnaissance, exploitation, and post-exploitation with cryptographic integrity guarantees and policy-driven execution controls aligned with OpenSec principles.
 
 ---
 
@@ -65,21 +63,25 @@ rcf/
 ## Features
 
 ### Reconnaissance & Discovery
+
 - **High-Speed Scanning** — Parallel CIDR scanning with configurable concurrency and target caps (`--max-targets`)
 - **Protocol Fingerprinting** — Banner grab and fingerprint HTTP, SSH, SMB, VNC, Redis, MySQL, PostgreSQL, and more
 - **Credential Testing** — Parallel authentication brute force for SSH, FTP, HTTP Basic, and SNMP
 
 ### Exploitation
+
 - **Web Exploits** — Log4Shell (CVE-2021-44228), ProxyShell, SQLi, XSS, SSRF, Deserialization, Struts RCE
 - **Service Exploits** — Redis unauthorized access, MySQL weak auth, Jenkins script console, Tomcat manager deploy, WordPress admin upload
 - **Payload Generation** — Polymorphic shellcode with XOR/NOP-sled encoders, staged/stageless payloads, C/Python/Raw output
 
 ### Post-Exploitation
-- **C2 Framework** — Centralized multi-session handler with Ed25517 key authentication and sliding-window rate limiting
+
+- **C2 Framework** — Centralized multi-session handler with Ed25519 key authentication and sliding-window rate limiting
 - **Linux Enumeration** — SUID/Capability escalation checkers, reverse shell listeners, webshell handlers
 - **Persistence** — Credential harvesting and automated persistence mechanisms
 
 ### Security & Compliance
+
 - **OpenSec Policy Engine** — Enforce pre-execution rules with module glob patterns, target CIDR scoping, time windows, and operator identity. Default: **deny**
 - **Binary Integrity** — Ed25519-signed release binaries; startup verification prevents execution of tampered builds
 - **Cryptographic Identity** — C2 agents identified by Ed25519 public keys; session tokens via HKDF-SHA256
@@ -100,23 +102,6 @@ cargo build --release -p rcf-cli
 Optional runtime dependencies for advanced features:
 - `nasm` — Payload stager assembly (build.rs fallback to placeholder if absent)
 - `tor` — Anonymity system proxy chain (planned for v0.4)
-
----
-
-## Security
-
-RCF is designed for **authorized security assessments only**. The framework enforces multiple security layers:
-
-| Layer | Mechanism | Status |
-|-------|-----------|--------|
-| Integrity | Ed25519 binary signature verification | v0.3 |
-| Authentication | C2 agent key pairs via Ed25519 challenge-response | v0.3 |
-| Authorization | OpenSec policy engine (module allow/deny rules) | v0.3 |
-| Audit | Structured JSON logging of all operations | v0.2 |
-| Transport | TLS with certificate validation enabled by default | v0.2 |
-| Credentials | Argon2id hashing for stored secrets | v0.2 |
-| Memory | `zeroize` trait for secret cleanup | v0.2 |
-| C2 | Command allowlisting + metacharacter filtering | v0.2 |
 
 ---
 
