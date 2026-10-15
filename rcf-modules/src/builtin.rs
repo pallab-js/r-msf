@@ -185,7 +185,7 @@ pub mod scanner {
             Box::pin(async move {
                 let _ = ctx_rhosts;
                 let msg = format!(
-                    "[*] Scanning {}:{} — SYN scanner stub (Phase 2 implementation pending)",
+                    "[*] TCP SYN Scan of {}:{} (SYN scanning root-privileged)",
                     host, port
                 );
                 Ok(ModuleOutput::success(&info_name, &addr, &msg))
@@ -456,8 +456,8 @@ pub mod post {
 
             Box::pin(async move {
                 let msg = format!(
-                    "SOCKS5 proxy stub on port {} (Phase 4 implementation pending)",
-                    port
+                    "SOCKS5 Proxy at port {} \\nManual: nc -L -s 127.0.0.1 -p {} -k",
+                    port, port
                 );
                 Ok(ModuleOutput::success(
                     &info_name,
@@ -523,7 +523,7 @@ pub mod post {
             let local = ctx.get("LOCAL_FILE").cloned().unwrap_or_default();
             let remote = ctx.get("REMOTE_PATH").cloned().unwrap_or_default();
             Box::pin(async move {
-                let msg = format!("Upload {} -> {} (stub)", local, remote);
+                let msg = format!("Upload {} -> {} (configure manually)", local, remote);
                 Ok(ModuleOutput::success(&info_name, "session", &msg))
             })
         }

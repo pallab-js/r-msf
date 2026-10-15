@@ -452,7 +452,7 @@ impl Module for SmtpScanner {
             "USERS",
             false,
             "Comma-separated list of usernames",
-            rcf_core::OptionValue::String("admin,root,test,user,guest,info,support".to_string()),
+            rcf_core::OptionValue::String("admin,root,test,user (use --users-file for customization)".to_string()),
         ));
         opts
     }

@@ -19,6 +19,9 @@ edition = "2024"
 authors = ["RCF Contributors"]
 license = "BSD-3-Clause"
 repository = "https://github.com/rcf/rcf"
+readme = "README.md"
+keywords = ["penetration testing", "cybersecurity", "framework", "red team", "ctf", "tryhackme", "hackthebox"]
+categories = ["security", "networking", "cryptography"]
 
 [workspace.dependencies]
 # Async runtime
